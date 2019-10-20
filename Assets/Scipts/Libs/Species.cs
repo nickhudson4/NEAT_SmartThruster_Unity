@@ -8,6 +8,7 @@ public class Species
     public Player mascot;
     public List<Player> members;
     public float speciesFitness;
+    public Color color;
 
     public Species(Player mascot){
         this.mascot = mascot;

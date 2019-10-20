@@ -14,6 +14,7 @@ public class Player
     public  float score;
     public float fitness;
     public bool isDead;
+    public Counter counter;
 
     public Player(NeatNetwork network, GameObject player_GO){
         this.network = network;
@@ -23,6 +24,7 @@ public class Player
         this.score = 0;
         this.fitness = 0;
         this.isDead = false;
+        this.counter = new Counter(5.0f);
     }
 
     public float getScore(){

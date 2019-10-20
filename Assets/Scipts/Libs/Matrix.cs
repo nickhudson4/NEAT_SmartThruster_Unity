@@ -36,6 +36,14 @@ public class Matrix
         return tmp;
     }
 
+    public static Matrix toVector(List<float> list){
+        Matrix mat = new Matrix(list.Count, 1);
+        for (int i = 0; i < list.Count; i++){
+            mat.insert(list[i], i);
+        }
+        return mat;
+    }
+
     public void fillZeros(){
         for (int i = 0; i < rows; i++){
             for (int j = 0; j < columns; j++){
@@ -82,6 +90,20 @@ public class Matrix
             return false;
         }
 
+    }
+
+
+    public Matrix normalize(){
+        List<float> list = this.toList();
+        float sum = 0;
+        for (int i = 0; i < list.Count; i++){
+            sum += list[i] * list[i];
+        }
+        float len = Mathf.Sqrt(sum);
+        for (int i = 0; i < list.Count; i++){
+            list[i] = list[i]/len;
+        }
+        return Matrix.toVector(list);
     }
 
     public Matrix dot(Matrix otherMatrix){

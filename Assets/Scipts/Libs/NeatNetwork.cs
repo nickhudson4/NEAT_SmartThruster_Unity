@@ -23,6 +23,7 @@ public class NeatNetwork
 
     public float fitness;
     public Species species;
+    public float bias;
 
 
     public NeatNetwork(int input_size, int output_size, bool fill){
@@ -103,6 +104,7 @@ public class NeatNetwork
                 addConnection(n, n2);
             }
         }
+        bias = Random.Range(-1.0f, 1.0f);
     }
 
     // public int getInnovConnectionIndex(int innov){
@@ -191,12 +193,20 @@ public class NeatNetwork
         //90% Chance of perturbed. 10% of new weight
         foreach (Connection c in connections){
             float rand = Random.Range(0.0f, 1.0f);
+            float rand_bias = Random.Range(0.0f, 1.0f);
             if (rand > 0.1f){ //Perturb
                 float perturb_val = Random.Range(-0.5f, 0.5f);
                 c.weight+=perturb_val;
             }
             else { //New weight
                 c.weight = Random.Range(-2.0f, 2.0f);
+            }
+            if (rand_bias > 0.1f){
+                float perturb_val = Random.Range(-0.5f, 0.5f);
+                bias+=perturb_val;
+            }
+            else {
+                bias = Random.Range(-1.0f, 1.0f);
             }
         }
     }
@@ -434,11 +444,18 @@ public class NeatNetwork
         NeatNetwork newNet = new NeatNetwork(parent1.input_size, parent1.output_size, false);
         newNet.nodes = newNodes;
         newNet.connections = newConnections;
+        int randomParent = Random.Range(0, 2);
+        if (randomParent == 1){
+            newNet.bias = parent1.bias;
+        }
+        else {
+            newNet.bias = parent2.bias;
+        }
 
-        newNet.printNetwork("CHILD");
+        // newNet.printNetwork("CHILD");
 
 
-        return null;
+        return newNet;
     }
 
     public Matrix feedForward(List<float> inputs){
@@ -446,14 +463,22 @@ public class NeatNetwork
         List<int> next_queue = new List<int>();
         List<int> all_checked_nodes = new List<int>();
         List<int> outputNodes = new List<int>();
+        Dictionary<int, bool> biasTracker = new Dictionary<int, bool>(); //Holds whether a node has already summed bias
 
 
         int inputCounter = 0;
         foreach (var n in nodes){ //Get input nodes to start
+            biasTracker[n.Key] = false;
             if (n.Value.type == Node.Type.INPUT){
                 n.Value.currentValue = inputs[inputCounter];
                 to_check_queue.Add(n.Value.id);
                 inputCounter++;
+            }
+            else {
+                n.Value.currentValue = 0.0f;
+            }
+            if (n.Value.type == Node.Type.OUTPUT){
+                outputNodes.Add(n.Key);
             }
         }
 
@@ -462,9 +487,15 @@ public class NeatNetwork
                 foreach (Connection c in connections){
                     if (c.in_node == to_check_queue[i]){
                         //TODO: Dont forget about bias
+                        // printNode(c.out_node, "To node: ");
+                        // printNode(c.in_node, " += ");
+                        // Debug.Log("Times weights: " + c.weight);
                         nodes[c.out_node].currentValue += nodes[c.in_node].currentValue * c.weight;
+                        if (!biasTracker[c.out_node]){
+                            nodes[c.out_node].currentValue += bias;
+                            biasTracker[c.out_node] = true;
+                        }
                         if (nodes[c.out_node].type == Node.Type.OUTPUT){
-                            outputNodes.Add(c.out_node);
                             continue;
                         }
                         if (!next_queue.Contains(c.out_node) && !all_checked_nodes.Contains(c.out_node)){
@@ -473,9 +504,9 @@ public class NeatNetwork
                         }
                     }
                 }
-                to_check_queue = next_queue;
-                next_queue.Clear();
             }
+            to_check_queue = next_queue;
+            next_queue.Clear();
         }
         outputNodes.Sort();
         Matrix outputs = new Matrix(outputNodes.Count, 1);
@@ -483,16 +514,25 @@ public class NeatNetwork
             outputs.insert(nodes[outputNodes[i]].currentValue, i);
         }
 
-        return outputs.sigmoid();
+        // Debug.Log("OUTPUT 0: " + outputs.get(0));
+        // Debug.Log("OUTPUT 1: " + outputs.get(1));
+        // Debug.Log("OUTPUT 2: " + outputs.get(2));
+        // Debug.Log("OUTPUT 3: " + outputs.get(3));
+        return outputs.normalize();
+
+        // Vector2 test = new Vector2(outputs.get(0), outputs.get(1)).normalized;
+        // Debug.Log("TEST: " + test);
+
+        // return outputs.sigmoid();
 
     }
 
     public void printNetwork(string tag = ""){
         if (tag != "")
             Debug.Log(tag);
-        foreach (var n in nodes){
-            Debug.Log("Node: " + n.Value.id + " Type: " + n.Value.type);
-        }
+        // foreach (var n in nodes){
+        //     Debug.Log("Node: " + n.Value.id + " Type: " + n.Value.type + " Value: " + n.Value.currentValue);
+        // }
         foreach (Connection c in connections){
             Debug.Log("Connection " + c.in_node + " to " + c.out_node + " innov: " + c.innov + " weight: " + c.weight + " enabled: " + c.enabled);
         }
@@ -503,4 +543,11 @@ public class NeatNetwork
             Debug.Log(tag);
         Debug.Log("Connection " + c.in_node + " to " + c.out_node + " innov: " + key + " weight: " + c.weight + " enabled: " + c.enabled);
     }
+
+    public void printNode(int nodeid, string tag =""){
+        if (tag != "") 
+            Debug.Log(tag);
+        Debug.Log("Node: " + nodeid + " Type: " + nodes[nodeid].type + " Value: " + nodes[nodeid].currentValue);
+    }
+
 }

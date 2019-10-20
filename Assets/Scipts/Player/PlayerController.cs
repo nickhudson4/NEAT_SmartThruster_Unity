@@ -5,15 +5,15 @@ using UnityEngine;
 public class PlayerController : MonoBehaviour
 {
     public Rigidbody rb;
-    NetworkManager networkManager;
+    NeatManager networkManager;
 
-    private float force_mult = 0.3f;
+    private float force_mult = 7.0f;
     private float speed = 10.0f;
     private float rot_speed = 100.0f;
 
     void Start(){
         rb = GetComponent<Rigidbody>();
-        networkManager = GameObject.Find("NeatManager").GetComponent<NetworkManager>();
+        networkManager = GameObject.Find("NeatManager").GetComponent<NeatManager>();
     }
 
     void Update(){
@@ -63,8 +63,8 @@ public class PlayerController : MonoBehaviour
     }
 
     public void applyForceOnAxis(float horiz, float vert){
-        rb.AddForce((Vector3.forward * vert) * force_mult, ForceMode.Impulse);
-        rb.AddForce((Vector3.right * horiz) * force_mult, ForceMode.Impulse);
+        rb.AddForce((Vector3.forward * vert) * force_mult * Time.deltaTime, ForceMode.Impulse);
+        rb.AddForce((Vector3.right * horiz) * force_mult * Time.deltaTime, ForceMode.Impulse);
     }
 
     public void moveForwardWithRot(float horiz){
