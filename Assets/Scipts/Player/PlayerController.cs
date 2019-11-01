@@ -7,11 +7,11 @@ public class PlayerController : MonoBehaviour
     public Rigidbody rb;
     NeatManager networkManager;
 
-    private float force_mult = 7.0f;
+    private float force_mult = 7.0f; //7 is good
     private float speed = 10.0f;
     private float rot_speed = 100.0f;
 
-    void Start(){
+    void Awake(){
         rb = GetComponent<Rigidbody>();
         networkManager = GameObject.Find("NeatManager").GetComponent<NeatManager>();
     }
@@ -62,9 +62,13 @@ public class PlayerController : MonoBehaviour
         rb.AddForce((-Vector3.right * forces.get(3)) * force_mult);
     }
 
-    public void applyForceOnAxis(float horiz, float vert){
-        rb.AddForce((Vector3.forward * vert) * force_mult * Time.deltaTime, ForceMode.Impulse);
-        rb.AddForce((Vector3.right * horiz) * force_mult * Time.deltaTime, ForceMode.Impulse);
+    public void applyForceOnAxis(float horiz, float vert, bool fps_indep){
+        // Debug.Log("VERT: " + vert);
+        // Debug.Log("HORIZ: " + horiz);
+        float fps_mult = fps_indep ? Time.deltaTime : 1.0f;
+        force_mult = fps_indep ? force_mult : force_mult / 1.3f;
+        rb.AddForce((Vector3.forward * vert) * force_mult * fps_mult, ForceMode.Impulse);
+        rb.AddForce((Vector3.right * horiz) * force_mult * fps_mult, ForceMode.Impulse);
     }
 
     public void moveForwardWithRot(float horiz){

@@ -2,6 +2,8 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using System.IO;
+using System.Linq;
 
 public class NeatNetwork
 {
@@ -22,8 +24,9 @@ public class NeatNetwork
     // }
 
     public float fitness;
-    public Species species;
     public float bias;
+
+    public int tmp;
 
 
     public NeatNetwork(int input_size, int output_size, bool fill){
@@ -38,6 +41,7 @@ public class NeatNetwork
         }
     }
 
+    [System.Serializable]
     public class Node
     {
         public enum Type
@@ -50,6 +54,7 @@ public class NeatNetwork
         public int id;
 
         public float currentValue;
+        public float bias;
 
         public Node(Type type, int id){
             this.type = type;
@@ -60,6 +65,7 @@ public class NeatNetwork
 
     }
 
+    [System.Serializable]
     public class Connection
     {
         public int in_node;
@@ -104,7 +110,7 @@ public class NeatNetwork
                 addConnection(n, n2);
             }
         }
-        bias = Random.Range(-1.0f, 1.0f);
+        bias = Random.Range(-3.0f, 3.0f);
     }
 
     // public int getInnovConnectionIndex(int innov){
@@ -132,6 +138,10 @@ public class NeatNetwork
             node2 = nodes[Random.Range(0, nodes.Count)];
         }
 
+        if ((node1.type == Node.Type.INPUT && node2.type == Node.Type.INPUT) || (node1.type == Node.Type.OUTPUT && node2.type == Node.Type.OUTPUT) || (node1.id == node2.id)){
+            return;
+        }
+
         float weight = Random.Range(-2.0f, 2.0f);
 
 
@@ -142,17 +152,11 @@ public class NeatNetwork
         else if (node1.type == Node.Type.OUTPUT && node2.type == Node.Type.INPUT)
             reversed = true;
 
-        bool connection_exist = false;
-        // foreach (Connection c in connections){
         foreach (Connection c in connections){
             if (c.in_node == node1.id && c.out_node == node2.id){
-                connection_exist = true;
-                // break;
                 return;
             }
             else if (c.in_node == node2.id && c.out_node == node1.id){
-                connection_exist = true;
-                // break;
                 return;
             }
         }
@@ -175,6 +179,9 @@ public class NeatNetwork
         else {
             target_connection = connections[connection_innov];
         }
+        if (!target_connection.enabled){
+            return;
+        }
         target_connection.enabled = false;
 
         Node newNode = new Node(Node.Type.HIDDEN, nodes.Count);
@@ -182,10 +189,12 @@ public class NeatNetwork
         Connection newToOut = new Connection(newNode.id, target_connection.out_node, GlobalVars.addPair(new Vector2(newNode.id, target_connection.out_node)), target_connection.weight, true);
 
         nodes.Add(newNode.id, newNode);
-        // connections.Add(GlobalVars.getInnov(), inToNew);
-        // connections.Add(GlobalVars.getInnov(), newToOut);
         connections.Add(inToNew);
         connections.Add(newToOut);
+
+    }
+
+    private void testForLoop(){
 
     }
 
@@ -206,7 +215,7 @@ public class NeatNetwork
                 bias+=perturb_val;
             }
             else {
-                bias = Random.Range(-1.0f, 1.0f);
+                bias = Random.Range(-3.0f, 3.0f);
             }
         }
     }
@@ -339,105 +348,117 @@ public class NeatNetwork
         return 0;
     }
 
+    public static bool getRandBool(){
+        int randNum = Random.Range(0, 2);
+
+        if (randNum == 0){
+            return true;
+        }
+        else {
+            return false;
+        }
+    }
+
     public static NeatNetwork crossover(NeatNetwork parent1, NeatNetwork parent2){
-        // List<Connection> newConnections = new List<Connection>();
         Dictionary<int, Node> newNodes = new Dictionary<int, Node>();
         List<Connection> newConnections = new List<Connection>();
+
+        bool useWeightAvg = false;
+        if (Random.Range(0.0f, 1.0f) <= 0.3f){ //% of crossovers will use average weights from both parents instead of picking one at random
+            useWeightAvg = true;
+        }
+        // useWeightAvg = false;
 
         bool parent1_fitest;
         if (parent1.fitness > parent2.fitness){
             parent1_fitest = true;
         }
-        else {
+        else if (parent1.fitness < parent2.fitness) {
             parent1_fitest = false;
         }
+        else {
+            parent1_fitest = NeatNetwork.getRandBool();
+        }
 
+        //TODO: Cleanup below code
 
         foreach (var p in GlobalVars.pairs){
-
-            // int p1_index = parent1.connections.ContainsKey(i) ? i : -1;
-            // int p2_index = parent2.connections.ContainsKey(i) ? i : -1;
             bool p1_contains = parent1.containsInnov(p.Key);
             bool p2_contains = parent2.containsInnov(p.Key);
 
-            // if (p2_index == -1 && p1_index != -1){ //parent 1 has connection & not parent 2
             if (p1_contains && !p2_contains){
                 if (parent1_fitest){
-                    // newConnections.Add(parent1.connections[p1_index]);
                     Connection currCon = parent1.getConnectionFromInnov(p.Key);
-                    newConnections.Add(currCon);
+                    newConnections.Add(new Connection(currCon.in_node, currCon.out_node, currCon.innov, currCon.weight, currCon.enabled));
                     if (!newNodes.ContainsKey(currCon.in_node)){
-                        newNodes.Add(currCon.in_node, parent1.nodes[currCon.in_node]);
+                        Node tmpNode = parent1.nodes[currCon.in_node];
+                        newNodes.Add(currCon.in_node, new Node(tmpNode.type, tmpNode.id));
                     }
                     if (!newNodes.ContainsKey(currCon.out_node)){
-                        newNodes.Add(currCon.out_node, parent1.nodes[currCon.out_node]);
+                        Node tmpNode = parent1.nodes[currCon.out_node];
+                        newNodes.Add(currCon.out_node, new Node(tmpNode.type, tmpNode.id));
                     }
                 }
             }
-            // else if (p1_index == -1 && p2_index != -1){ //parent 2 has connection & not parent 1
             else if (!p1_contains && p2_contains){
                 if (!parent1_fitest){
-                    // newConnections.Add(parent2.connections[p2_index]);
-                    // newConnections.Add(i, parent2.connections[i]);
                     Connection currCon = parent2.getConnectionFromInnov(p.Key);
-                    newConnections.Add(currCon);
-                    // newConnections.Add(parent2.getConnectionFromInnov(p.Key));
+                    newConnections.Add(new Connection(currCon.in_node, currCon.out_node, currCon.innov, currCon.weight, currCon.enabled));
                     if (!newNodes.ContainsKey(currCon.in_node)){
-                        newNodes.Add(currCon.in_node, parent2.nodes[currCon.in_node]);
+                        Node tmpNode = parent2.nodes[currCon.in_node];
+                        newNodes.Add(currCon.in_node, new Node(tmpNode.type, tmpNode.id));
                     }
                     if (!newNodes.ContainsKey(currCon.out_node)){
-                        newNodes.Add(currCon.out_node, parent2.nodes[currCon.out_node]);
+                        Node tmpNode = parent2.nodes[currCon.out_node];
+                        newNodes.Add(currCon.out_node, new Node(tmpNode.type, tmpNode.id));
                     }
 
                 }
             }
-            // else if (p1_index != -1 && p2_index != -1){ //They both have it
             else if (p1_contains && p2_contains){
-                int rand_parent = Random.Range(0, 2);
-                // Connection currCon;
-                if (rand_parent == 0){ //Taking connection from parent 1
-                    // newConnections.Add(parent1.connections[p1_index]);
-                    // newConnections.Add(i, parent1.connections[i]);
-                    Connection currCon = parent1.getConnectionFromInnov(p.Key);
-                    newConnections.Add(currCon);
-                    // newConnections.Add(parent1.getConnectionFromInnov(p.Key));
-                    if (!newNodes.ContainsKey(currCon.in_node)){
-                        newNodes.Add(currCon.in_node, parent1.nodes[currCon.in_node]);
+                if (useWeightAvg){
+                    Connection p1_connection = parent1.getConnectionFromInnov(p.Key);
+                    Connection p2_connection = parent2.getConnectionFromInnov(p.Key);
+                    float average_weight = (p1_connection.weight + p2_connection.weight) / 2.0f;
+                    newConnections.Add(new Connection(p1_connection.in_node, p1_connection.out_node, p1_connection.innov, average_weight, Random.Range(0, 2) == 1 ? p1_connection.enabled : p2_connection.enabled));
+                    if (!newNodes.ContainsKey(p1_connection.in_node)){
+                        Node tmpNode = parent1.nodes[p1_connection.in_node];
+                        newNodes.Add(p1_connection.in_node, new Node(tmpNode.type, tmpNode.id));
                     }
-                    if (!newNodes.ContainsKey(currCon.out_node)){
-                        newNodes.Add(currCon.out_node, parent1.nodes[currCon.out_node]);
+                    if (!newNodes.ContainsKey(p1_connection.out_node)){
+                        Node tmpNode = parent1.nodes[p1_connection.out_node];
+                        newNodes.Add(p1_connection.out_node, new Node(tmpNode.type, tmpNode.id));
                     }
-
-                //     if (!newNodes.ContainsKey(parent1.connections[p1_index].in_node)){
-                //         newNodes.Add(parent1.connections[p1_index].in_node, parent1.nodes[parent1.connections[p1_index].in_node]);
-                //     }
-                //     if (!newNodes.ContainsKey(parent1.connections[p1_index].out_node)){
-                //         newNodes.Add(parent1.connections[p1_index].out_node, parent1.nodes[parent1.connections[p1_index].out_node]);
-                //     }
                 }
-                else{ //Taking connection from parent 2
-                    // newConnections.Add(parent2.connections[p2_index]);
-                    // newConnections.Add(i, parent2.connections[i]);
-                    Connection currCon = parent2.getConnectionFromInnov(p.Key);
-                    newConnections.Add(currCon);
-                    // newConnections.Add(parent2.getConnectionFromInnov(p.Key));
-                    if (!newNodes.ContainsKey(currCon.in_node)){
-                        newNodes.Add(currCon.in_node, parent2.nodes[currCon.in_node]);
-                    }
-                    if (!newNodes.ContainsKey(currCon.out_node)){
-                        newNodes.Add(currCon.out_node, parent2.nodes[currCon.out_node]);
-                    }
+                else {
+                    int rand_parent = Random.Range(0, 2);
+                    if (rand_parent == 0){ //Taking connection from parent 1
+                        Connection currCon = parent1.getConnectionFromInnov(p.Key);
+                        newConnections.Add(new Connection(currCon.in_node, currCon.out_node, currCon.innov, currCon.weight, currCon.enabled));
+                        if (!newNodes.ContainsKey(currCon.in_node)){
+                            Node tmpNode = parent1.nodes[currCon.in_node];
+                            newNodes.Add(currCon.in_node, new Node(tmpNode.type, tmpNode.id));
+                        }
+                        if (!newNodes.ContainsKey(currCon.out_node)){
+                            Node tmpNode = parent1.nodes[currCon.out_node];
+                            newNodes.Add(currCon.out_node, new Node(tmpNode.type, tmpNode.id));
+                        }
 
-                    // if (!newNodes.ContainsKey(parent2.connections[p2_index].in_node)){
-                    //     newNodes.Add(parent2.connections[p2_index].in_node, parent2.nodes[parent2.connections[p2_index].in_node]);
-                    // }
-                    // if (!newNodes.ContainsKey(parent2.connections[p2_index].out_node)){
-                    //     newNodes.Add(parent2.connections[p2_index].out_node, parent2.nodes[parent2.connections[p1_index].out_node]);
-                    // }
+                    }
+                    else{ //Taking connection from parent 2
+                        Connection currCon = parent2.getConnectionFromInnov(p.Key);
+                        newConnections.Add(new Connection(currCon.in_node, currCon.out_node, currCon.innov, currCon.weight, currCon.enabled));
+                        if (!newNodes.ContainsKey(currCon.in_node)){
+                            Node tmpNode = parent2.nodes[currCon.in_node];
+                            newNodes.Add(currCon.in_node, new Node(tmpNode.type, tmpNode.id));
+                        }
+                        if (!newNodes.ContainsKey(currCon.out_node)){
+                            Node tmpNode = parent2.nodes[currCon.out_node];
+                            newNodes.Add(currCon.out_node, new Node(tmpNode.type, tmpNode.id));
+                        }
+
+                    }
                 }
-            }
-            else { //Innov number error
-
             }
         }
 
@@ -452,100 +473,205 @@ public class NeatNetwork
             newNet.bias = parent2.bias;
         }
 
-        // newNet.printNetwork("CHILD");
+        // newNet.checkForDeadEnds();
 
 
         return newNet;
     }
 
-    public Matrix feedForward(List<float> inputs){
-        List<int> to_check_queue = new List<int>();
-        List<int> next_queue = new List<int>();
-        List<int> all_checked_nodes = new List<int>();
-        List<int> outputNodes = new List<int>();
-        Dictionary<int, bool> biasTracker = new Dictionary<int, bool>(); //Holds whether a node has already summed bias
+    private List<int> copyIntList(List<int> orig){
+        List<int> newList = new List<int>();
+        foreach (int i in orig){
+            newList.Add(i);
+        }
+
+        return newList;
+    }
 
 
-        int inputCounter = 0;
-        foreach (var n in nodes){ //Get input nodes to start
-            biasTracker[n.Key] = false;
+    private float backRecurse(int focusNode, List<int> myPathNodes){
+        if (nodes[focusNode].type == Node.Type.INPUT){
+            // Debug.Log("****** PATH: ******");
+            // foreach (int i in myPathNodes){
+            //     Debug.Log(i);
+            // }
+            return nodes[focusNode].currentValue;
+        }
+        float value = 0;
+        foreach (Connection c in connections){
+            if (nodes[focusNode].type == Node.Type.OUTPUT){
+            }
+            if (c.out_node == focusNode && c.enabled){
+                List<int> myNestedPathNodes = copyIntList(myPathNodes);
+                if (myPathNodes.Contains(c.in_node)){
+                    // Debug.Log("^^^^^^LOOP DETECTED^^^^^^");
+                    // printNetwork("FEED FORWARDING NETWORK: ");
+                    return 0.0f;
+                }
+                myNestedPathNodes.Add(c.in_node);
+                float backRec = backRecurse(c.in_node, myNestedPathNodes);
+                value += backRec * c.weight;
+
+            }
+        }
+        return value + bias;
+    }
+
+    public Matrix feedForward2(List<float> inputs){
+        // if (tmp == 10){
+            // printNetwork("======== Network ========");
+        // }
+        int i = 0;
+        foreach (var n in nodes){
             if (n.Value.type == Node.Type.INPUT){
-                n.Value.currentValue = inputs[inputCounter];
-                to_check_queue.Add(n.Value.id);
-                inputCounter++;
+                n.Value.currentValue = inputs[i];
+                i++;
             }
             else {
                 n.Value.currentValue = 0.0f;
             }
-            if (n.Value.type == Node.Type.OUTPUT){
-                outputNodes.Add(n.Key);
-            }
         }
 
-        while (to_check_queue.Count > 0){
-            for (int i = 0; i < to_check_queue.Count; i++){
+
+        List<int> out_nodes = new List<int>();
+        foreach (var n in nodes){
+            if (n.Value.type == Node.Type.OUTPUT){
+                // inCurrentRecursion.Add(n.Key);
+                List<int> myPathNodes = new List<int>();
+                myPathNodes.Add(n.Key);
+                float output = backRecurse(n.Key, myPathNodes);
+                n.Value.currentValue = output;
+                out_nodes.Add(n.Key);
+            }
+        }
+        out_nodes.Sort();
+        Matrix outputs = new Matrix(out_nodes.Count, 1);
+        for (int j = 0; j < out_nodes.Count; j++){
+            outputs.insert(nodes[out_nodes[j]].currentValue, j);
+        }
+
+        // outputs.printMatrix("********** OUTPUTS **********");
+        return outputs;
+    }
+
+    private void checkForDeadEnds(){
+        foreach (var n in nodes){
+            if (n.Value.type != Node.Type.INPUT){
+                bool foundConnection = false;
                 foreach (Connection c in connections){
-                    if (c.in_node == to_check_queue[i]){
-                        //TODO: Dont forget about bias
-                        // printNode(c.out_node, "To node: ");
-                        // printNode(c.in_node, " += ");
-                        // Debug.Log("Times weights: " + c.weight);
-                        nodes[c.out_node].currentValue += nodes[c.in_node].currentValue * c.weight;
-                        if (!biasTracker[c.out_node]){
-                            nodes[c.out_node].currentValue += bias;
-                            biasTracker[c.out_node] = true;
-                        }
-                        if (nodes[c.out_node].type == Node.Type.OUTPUT){
-                            continue;
-                        }
-                        if (!next_queue.Contains(c.out_node) && !all_checked_nodes.Contains(c.out_node)){
-                            next_queue.Add(c.out_node);
-                            all_checked_nodes.Add(c.out_node);
-                        }
+                    if (c.out_node == n.Key){
+                        foundConnection = true;
+                        break;
                     }
                 }
+                if (!foundConnection){
+                    Debug.Log("&&&&&&&&&&&&&&&&&& FOUND DEAD END &&&&&&&&&&&&&&&&&&&&");
+                }
             }
-            to_check_queue = next_queue;
-            next_queue.Clear();
         }
-        outputNodes.Sort();
-        Matrix outputs = new Matrix(outputNodes.Count, 1);
-        for (int i = 0; i < outputNodes.Count; i++){
-            outputs.insert(nodes[outputNodes[i]].currentValue, i);
+    }
+
+    public void saveNetwork(){
+
+        // if(!Directory.Exists()){
+        //     Debug.Log("HERERERE");
+        //     Directory.CreateDirectory("C:/Users/" + Environment.UserName + "/AppData/Local/PipeEstimating/PDF_Layers/TiledImages");
+        // }
+
+        string root_path = Application.dataPath + "/StreamingAssets/modelsaves/";
+        string child_path;
+        DirectoryInfo di = new DirectoryInfo(root_path);
+        int numFolders = di.GetDirectories().Length;
+        child_path = root_path + "save" + numFolders;
+        Directory.CreateDirectory(child_path);
+        Directory.CreateDirectory(child_path + "/nodes");
+        Directory.CreateDirectory(child_path + "/connections");
+
+        int i = 0;
+        foreach (var n in nodes){
+            n.Value.bias = bias;
+            string json = JsonUtility.ToJson(n.Value);
+            Debug.Log("JSON: " + json);
+
+            using (StreamWriter w = File.AppendText(child_path + "/nodes/node" + i + ".json"))
+            {
+                w.WriteLine(json);
+            }
+            i++;
         }
 
-        // Debug.Log("OUTPUT 0: " + outputs.get(0));
-        // Debug.Log("OUTPUT 1: " + outputs.get(1));
-        // Debug.Log("OUTPUT 2: " + outputs.get(2));
-        // Debug.Log("OUTPUT 3: " + outputs.get(3));
-        return outputs.normalize();
+        int j = 0;
+        foreach (Connection c in connections){
+            string json = JsonUtility.ToJson(c);
+            Debug.Log("JSON: " + json);
 
-        // Vector2 test = new Vector2(outputs.get(0), outputs.get(1)).normalized;
-        // Debug.Log("TEST: " + test);
+            using (StreamWriter w = File.AppendText(child_path + "/connections/connection" + j + ".json"))
+            {
+                w.WriteLine(json);
+            }
+            j++;
+        }
 
-        // return outputs.sigmoid();
+        NeatNetwork tmp = new NeatNetwork(10, 2, false);
+
+    }
+
+    public static NeatNetwork createNetworkFromSave(int save_num, NeatManager manager){
+        string root_path = Application.dataPath + "/StreamingAssets/modelsaves/";
+        string child_path = root_path + "save" + save_num;
+
+        DirectoryInfo nodes_di = new DirectoryInfo(child_path + "/nodes");
+        int num_nodes = Directory.GetFiles(child_path + "/nodes", "*", SearchOption.TopDirectoryOnly).Where(name => !name.EndsWith(".meta")).Count();
+
+        DirectoryInfo connections_di = new DirectoryInfo(child_path + "/connections");
+        int num_connections = Directory.GetFiles(child_path + "/connections", "*", SearchOption.TopDirectoryOnly).Where(name => !name.EndsWith(".meta")).Count();
+
+        Dictionary<int, Node> my_nodes = new Dictionary<int, Node>();
+        List<Connection> my_connections = new List<Connection>();
+        for (int i = 0; i < num_nodes; i++){
+            string json_string = File.ReadAllText(child_path + "/nodes" + "/node" + i + ".json");
+            Node n = JsonUtility.FromJson<Node>(json_string);
+            my_nodes.Add(n.id, n);
+        }
+        for (int i = 0; i < num_connections; i++){
+            string json_string = File.ReadAllText(child_path + "/connections" + "/connection" + i + ".json");
+            Connection c = JsonUtility.FromJson<Connection>(json_string);
+            my_connections.Add(c);
+        }
+        NeatNetwork tmp_net = new NeatNetwork(manager.input_size, manager.output_size, false);
+        tmp_net.nodes = my_nodes;
+        tmp_net.connections = my_connections;
+        tmp_net.bias = my_nodes[0].bias;
+
+
+
+        return tmp_net;
+    }
+
+    public void drawNetwork(GameObject parent_holder){
 
     }
 
     public void printNetwork(string tag = ""){
         if (tag != "")
             Debug.Log(tag);
-        // foreach (var n in nodes){
-        //     Debug.Log("Node: " + n.Value.id + " Type: " + n.Value.type + " Value: " + n.Value.currentValue);
-        // }
+        Debug.Log("Bias: " + bias);
+        foreach (var n in nodes){
+            Debug.Log("Node: " + n.Value.id + " Type: " + n.Value.type + " Value: " + n.Value.currentValue);
+        }
         foreach (Connection c in connections){
             Debug.Log("Connection " + c.in_node + " to " + c.out_node + " innov: " + c.innov + " weight: " + c.weight + " enabled: " + c.enabled);
         }
     }
 
-    public void printConnection(Connection c, int key, string tag = ""){
+    public void printConnection(Connection c, string tag = ""){
         if (tag != "")
             Debug.Log(tag);
-        Debug.Log("Connection " + c.in_node + " to " + c.out_node + " innov: " + key + " weight: " + c.weight + " enabled: " + c.enabled);
+        Debug.Log("Connection " + c.in_node + " to " + c.out_node + " innov: " + c.innov + " weight: " + c.weight + " enabled: " + c.enabled);
     }
 
     public void printNode(int nodeid, string tag =""){
-        if (tag != "") 
+        if (tag != "")
             Debug.Log(tag);
         Debug.Log("Node: " + nodeid + " Type: " + nodes[nodeid].type + " Value: " + nodes[nodeid].currentValue);
     }

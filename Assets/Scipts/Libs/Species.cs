@@ -10,6 +10,8 @@ public class Species
     public float speciesFitness;
     public Color color;
 
+    public int counter = 0;
+
     public Species(Player mascot){
         this.mascot = mascot;
         this.members = new List<Player>();
@@ -19,6 +21,23 @@ public class Species
 
     public void setSpeciesFitness(float newFitVal){
         this.speciesFitness += newFitVal;
+    }
+
+    public void setMascot(Player newPlayer){
+        bool found = false;
+        if (mascot != null){
+            for (int i = 0; i < members.Count; i++){
+                if (members[i].player_GO == mascot.player_GO){
+                    members[i] = newPlayer;
+                    found = true;
+                }
+            }
+        }
+
+        mascot = newPlayer;
+        if (!found){
+            members.Add(mascot);
+        }
     }
 
     public void reset(){

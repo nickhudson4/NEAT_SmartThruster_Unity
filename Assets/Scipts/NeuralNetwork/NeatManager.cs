@@ -1,24 +1,35 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using TMPro;
+using System.IO;
+
 
 public class NeatManager : MonoBehaviour
 {
+
+    public enum Mode {
+        TRAINING,
+        TESTING
+    }
+    public Mode mode;
+
     //POPULATION VARS
     public GameObject playerPrefab;
-    private Vector3 startPos = new Vector3(0.0f, 0.8f, -11.0f);
+    private Vector3 startPos = new Vector3(0.0f, 0.8f, -47.0f);
     public int populationSize = 100;
     public List<Player> players;
     private int isDeadCount = 0;
-    private float maxRuntime = 10.0f;
+    private float maxRuntime = 75.0f;
     private Counter global_counter;
+    private int gen_counter = 0;
 
     //SPECIES VARS
     public List<Species> species;
 
     //NETWORK VARS
-    int input_size = 10;
-    int output_size = 2;
+    public int input_size = 10;
+    public int output_size = 2;
     public float MUTATION_RATE;
     public float ADD_CONNECTION_RATE;
     public float ADD_NODE_RATE;
@@ -30,94 +41,105 @@ public class NeatManager : MonoBehaviour
     //MAZE VARS
     public GameObject target_GO;
     int layerMask = 1 << 9;
+    public GameObject pairs;
+    private List<Vector3> gatePositions;
+
+    //MISC
+    public TextMeshProUGUI current_gen_tmp;
+
+    //FILE WRITING VARS
+    private int numGensToWrite = 150;
+    private string line_tag = "";
+    private string all_fitnesses = "";
+
+    //MODELING SAVING VARS
+    private bool saveNextGen = false;
+    public TMP_InputField whichSave;
+
+    //PAUSING VARS
+    private bool pauseNextGen = false;
+    private bool pause = false;
+
+    //NETWORK DRAWING VARS
+    private NeatNetwork network_to_draw;
+    public GameObject networkParentHolder;
+
+    //MAZE GEN VARS
+    private int newMazeAfter = 50;
 
 
     void Start(){
         this.species = new List<Species>();
         this.players = new List<Player>();
         this.global_counter = new Counter(maxRuntime);
+        this.current_gen_tmp.text = "Gen: " + gen_counter;
+
+        this.mode = Mode.TRAINING;
+        this.pause = true;
+
+        // spawnPopulation();
+        gatePositions = getGatePositions();
 
 
-        spawnPopulation();
 
-
-
-        // NeatNetwork n1 = new NeatNetwork(3, 1, true);
-
-        // NeatNetwork n2 = new NeatNetwork(3, 1, true);
-        // // n1.addNode(1);
-        // // n1.addConnection(n1.nodes[0], n1.nodes[4]);
-        // n2.addNode(1);
-        // n2.addNode(3);
-        // n2.addConnection(n2.nodes[0], n2.nodes[4]);
-        // n2.addConnection(n2.nodes[2], n2.nodes[5]);
-        // n1.addNode(0);
-        // n2.addConnection(n2.nodes[2], n2.nodes[4]);
-        // // n1.addConnection(n1.nodes[2], n1.nodes[5], GlobalVars.getInnov());
-        // n2.fitness = 0.5f;
-
-        // n1.printNetwork("NETWORK 1");
-        // // n1.mutate();
-        // // n1.printNetwork("NETWORK 1 MUTATED");
-        // n2.printNetwork("NETWORK 2");
-        // Vector3 comp = NeatNetwork.getGeneCompareCounts(n1, n2);
-        // Debug.Log("MATHCNIONG: " + comp);
-        // // n2.mutate();
-        // // n2.printNetwork("NETWORK 2 MUTATED");
-
-        // NeatNetwork.crossover(n1, n2);
-        // run();
     }
 
     void Update(){
-        // Debug.Log("Current Count: " + global_counter.currentCount());
+        if (pause){ return; }
         run();
+        network_to_draw.drawNetwork(networkParentHolder);
+
     }
 
     private void run(){
-
         for (int i = 0; i < players.Count; i++){
-            // Player tmp = players[i];
             if (players[i].isDead || players[i].player_GO == null){ continue; }
-            // players[i].network.printNetwork("Player " + i + " Network: ");
+            players[i].network.tmp = i;
+            float distFromStartPos = Vector3.Distance(startPos, players[i].player_GO.transform.position);
+            // Debug.Log("DIST: " + distFromStartPos, players[i].player_GO);
+            if (global_counter.currentCount() >= 10.0f && distFromStartPos <= 10.0f){
+                Debug.Log("KILLED");
+                onDeath(i);
+            }
 
             List<float> dists = getRaycastDistances(players[i]);
             if (dists.Count != 8){ continue; }
             List<float> inputs = createInputList(dists, players[i]);
-            // printFloatList(inputs);
-            Matrix tmp = players[i].network.feedForward(inputs);
-            // tmp.printMatrix("OUPUTS");
-            players[i].controller.applyForceOnAxis(tmp.get(0), tmp.get(1));
-            // players[i].controller.applyForces(tmp);
-            // List<float> outputs = tmp.toList();
-            // printFloatList(outputs);
-
-            // float horiz = changeRange(outputs[0]);
-            // Debug.Log(horiz);
-            // players[i].controller.moveForwardWithRot(horiz);
+            Matrix outputs = players[i].network.feedForward2(inputs);
+            outputs = outputs.normalize();
+            players[i].controller.applyForceOnAxis(outputs.get(0), outputs.get(1), true);
+            // players[i].controller.moveForwardWithRot(outputs.get(0));
 
             if (global_counter.isOver()){
                 onDeath(i);
             }
+            players[i].checkIfStuck(i);
+            players[i].lastPos = players[i].player_GO.transform.position;
 
         }
         global_counter.incriment();
 
-        if (isDeadCount >= players.Count){
+        if (isDeadCount >= players.Count && mode == Mode.TRAINING){
             startEvaluation();
             global_counter.reset();
         }
     }
 
+
     private void spawnPopulation(){
+        int rand_net_to_draw = Random.Range(0, populationSize);
 
         List<Player> tmp = new List<Player>();
         for (int i = 0; i < populationSize; i++){
             GameObject player = Instantiate(playerPrefab, startPos, Quaternion.identity);
             player.name = "Player_" + i;
             NeatNetwork net = new NeatNetwork(input_size, output_size, true);
-            Player newPlayer = new Player(net, player);
+            Player newPlayer = new Player(net, player, this);
             tmp.Add(newPlayer);
+
+            if (rand_net_to_draw == i){
+                network_to_draw = net;
+            }
         }
         players = tmp;
     }
@@ -131,9 +153,27 @@ public class NeatManager : MonoBehaviour
         evaluatePlayers();
         createNextGen();
         isDeadCount = 0;
+        gen_counter++;
+        current_gen_tmp.text = "Gen: " + gen_counter;
+        if (pauseNextGen){
+            pause = true;
+        }
     }
 
     private void fillSpecies(){
+        if (species.Count <= populationSize/10){
+            DT-=0.3f;
+        }
+        else {
+            DT+=0.3f;
+        }
+
+        if (gen_counter > 0 && gen_counter % 20 == 0){ //after number of gens, remove lowest species
+            Debug.Log("===== REMOVING WORST SPECIES =====");
+            int worst_species = getWorstSpecies();
+            species.RemoveAt(worst_species);
+        }
+
         foreach (Player p in players){
             bool foundSpecies = false;
             foreach (Species s in species){
@@ -149,15 +189,15 @@ public class NeatManager : MonoBehaviour
             if (!foundSpecies){
                 Species newSpecies = new Species(p);
                 newSpecies.color = new Color(
-                    Random.Range(0f, 1f), 
-                    Random.Range(0f, 1f), 
+                    Random.Range(0f, 1f),
+                    Random.Range(0f, 1f),
                     Random.Range(0f, 1f)
                 );
                 species.Add(newSpecies);
                 p.species = newSpecies;
             }
         }
-        Debug.Log("Species: " + species.Count);
+        Debug.Log("Num Species: " + species.Count);
     }
 
     private void removeEmptySpecies(){
@@ -176,10 +216,39 @@ public class NeatManager : MonoBehaviour
 
             p.species.setSpeciesFitness(adjustedScore);
             p.fitness = adjustedScore;
+            p.network.fitness = adjustedScore;
         }
+        Debug.Log("GLOBAL FITNESS: " + calc_global_fitness() + " At gen: " + gen_counter);
+        // string tmp = calc_global_fitness:
+        float global_fit = calc_global_fitness();
+        string tmp = System.String.Format("{0:0.00}", global_fit);
+        if (global_fit < 10.0f){
+            tmp = "0"  + tmp;
+        }
+        all_fitnesses += tmp + ",";
+
+
+        // if (gen_counter == numGensToWrite){
+        //     using (StreamWriter w = File.AppendText(Application.dataPath + "/StreamingAssets/test.txt"))
+        //     {
+        //         w.WriteLine("" + line_tag + " Pop Size: " + populationSize + " Mut Rate: " + MUTATION_RATE + " Add Conn Rate: " + ADD_CONNECTION_RATE + " Add Node Rate: " + ADD_NODE_RATE + " C1: " + c1 + " C2: " + c2 + " C3: " + c3 + " DT: " + DT);
+        //         w.WriteLine(line_tag + all_fitnesses);
+        //     }
+        // }
+
+        if (saveNextGen || (gen_counter % 300 == 0 && gen_counter > 0)){
+            saveBestModel();
+        }
+
+        // if (gen_counter % newMazeAfter == 0 && gen_counter > 0){
+        //     GameObject.Find("MazeGenerator").GetComponent<MazeGenerator>().OnClickGenerateMaze();
+        // }
+
     }
 
     private void createNextGen(){
+        network_to_draw = getBestNetwork();
+
         List<Player> fittest = new List<Player>();
         foreach (Species s in species){
             float best = -1.0f;
@@ -191,44 +260,118 @@ public class NeatManager : MonoBehaviour
                 }
             }
             if (bestPlayer != null){
-                GameObject player = Instantiate(playerPrefab, startPos, Quaternion.identity);
-                player.name = "Player_";
-                Player bestP = new Player(bestPlayer, player);
+                Player bestP = spawnPlayer(bestPlayer, startPos);
                 bestP.species = s;
-                player.GetComponent<Renderer>().material.SetColor("_Color", s.color);
+                s.setMascot(bestP);
+                bestP.player_GO.GetComponent<Renderer>().material.SetColor("_Color", s.color);
                 fittest.Add(bestP);
             }
         }
+        // foreach (Player p in players){ //% of players are mutated without crossover
+        //     float rand = Random.Range(0.0f, 1.0f);
+        //     if (rand <= .2f){
+        //         NeatNetwork newNet = p.network;
+        //         newNet.mutate();
+        //         Player newP = spawnPlayer(newNet, startPos);
+        //         newP.species = p.species;
+        //         newP.player_GO.GetComponent<Renderer>().material.SetColor("_Color", p.species.color);
+        //         fittest.Add(newP);
+        //     }
+        // }
+        int loopCounter = 0;
         while (fittest.Count < populationSize){
-            Species s = getRandSpeciesWithProbability();
-            Player p1 = getRandPlayerWithProbability(s);
-            Player p2 = getRandPlayerWithProbability(s);
-
+            Species s = getRandSpeciesWithProbability(); //Get high fitness species
+            Player p1 = getRandPlayerWithProbability(s); //Get high fitness player1 from species
+            Player p2 = getRandPlayerWithProbability(s); //Get high fitness player2 from species
+            // p1.network.printNetwork("======== PARENT1 " + p1.player_GO.name + " with fitness: " + p1.fitness + " ========");
+            // p2.network.printNetwork("======== PARENT2 " + p2.player_GO.name + " with fitness: " + p2.fitness + " ========");
             NeatNetwork childNet = NeatNetwork.crossover(p1.network, p2.network);
+            // childNet.printNetwork("======= CHILD =======");
             float r1 = Random.Range(0.0f, 1.0f);
             float r2 = Random.Range(0.0f, 1.0f);
             float r3 = Random.Range(0.0f, 1.0f);
             if (r1 < MUTATION_RATE){
+                // Debug.Log("MUTATED");
                 childNet.mutate();
             }
             if (r2 < ADD_CONNECTION_RATE){
+                // Debug.Log("ADDED CONNECTION");
                 childNet.addConnection(null, null, true);
             }
             if (r3 < ADD_NODE_RATE){
                 childNet.addNode(-1, true);
             }
 
-            GameObject player = Instantiate(playerPrefab, startPos, Quaternion.identity);
-            player.name = "Player_";
-            Player newPlayer = new Player(childNet, player);
+            Player newPlayer = spawnPlayer(childNet, startPos);
             newPlayer.species = s;
-            player.GetComponent<Renderer>().material.SetColor("_Color", s.color);
+            newPlayer.player_GO.GetComponent<Renderer>().material.SetColor("_Color", s.color);
 
             fittest.Add(newPlayer);
 
+            if (loopCounter >= 500){
+                Debug.Log("INFINITE WHILE LOOP DETECTED!!!!");
+                break;
+            }
+
+            loopCounter++;
         }
         destroyPopulation();
         players = fittest;
+    }
+
+    private List<Vector3> getGatePositions(){
+        List<Vector3> tmp_rtn = new List<Vector3>();
+        for (int i = 0; i < pairs.transform.childCount; i+=2){
+            Transform p1 = pairs.transform.GetChild(i);
+            Transform p2 = pairs.transform.GetChild(i+1);
+
+            Vector3 tmp_pos_1 = p1.position;
+            tmp_pos_1.x += p1.localScale.x / 2;
+            Vector3 tmp_pos_2 = p2.position;
+            tmp_pos_2.x -= p2.localScale.x / 2;
+            Vector3 newPos = (tmp_pos_1 + tmp_pos_2) / 2;
+            GameObject prim = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            prim.transform.localScale = new Vector3(2,2,2);
+            prim.transform.position = newPos;
+            tmp_rtn.Add(newPos);
+        }
+        return tmp_rtn;
+    }
+
+
+    private void saveBestModel(){
+        float bestFitness = -1.0f;
+        Player bestP = null;
+        foreach (Player p in players){
+            if (p.fitness > bestFitness){
+                bestFitness = p.fitness;
+                bestP = p;
+            }
+        }
+        bestP.network.saveNetwork();
+
+        saveNextGen = false;
+    }
+
+    private NeatNetwork getBestNetwork(){
+        float bestFitness = -1.0f;
+        NeatNetwork bestP = null;
+        foreach (Player p in players){
+            if (p.fitness > bestFitness){
+                bestFitness = p.fitness;
+                bestP = p.network;
+            }
+        }
+
+        return bestP;
+    }
+
+    private Player spawnPlayer(NeatNetwork network, Vector3 pos){
+        GameObject player = Instantiate(playerPrefab, pos, Quaternion.identity);
+        player.name = "Player_" + Random.Range(0, 10000);
+
+        Player newPlayer = new Player(network, player, this);
+        return newPlayer;
     }
 
 
@@ -266,6 +409,19 @@ public class NeatManager : MonoBehaviour
         return null;
     }
 
+    private int getWorstSpecies(){
+        float worst_fit = 1000.0f;
+        int worst = 0;
+        for (int i = 0; i < species.Count; i++){
+            if (species[i].speciesFitness < worst_fit){
+                worst_fit = species[i].speciesFitness;
+                worst = i;
+            }
+        }
+
+        return worst;
+    }
+
     private void destroyPopulation(){
         foreach (Player p in players){
             Destroy(p.player_GO);
@@ -274,13 +430,26 @@ public class NeatManager : MonoBehaviour
         players.Clear();
     }
 
+
     private List<float> createInputList(List<float> ray_dists, Player p){
         List<float> inputs = new List<float>();
-        for (int i = 0; i < ray_dists.Count; i++){
-            inputs.Add(ray_dists[i]);
+        // for (int i = 0; i < ray_dists.Count; i++){
+        //     inputs.Add(ray_dists[i]);
+        // }
+        // inputs.Add(target_GO.transform.position.x);
+        // inputs.Add(target_GO.transform.position.z);
+
+        for (int i = 0; i < input_size; i++){
+            if (i < ray_dists.Count){
+                inputs.Add(ray_dists[i]);
+            }
+            else if (i == 8){
+                inputs.Add(target_GO.transform.position.x);
+            }
+            else if (i == 9){
+                inputs.Add(target_GO.transform.position.z);
+            }
         }
-        inputs.Add(target_GO.transform.position.x);
-        inputs.Add(target_GO.transform.position.z);
 
         return inputs;
     }
@@ -295,7 +464,12 @@ public class NeatManager : MonoBehaviour
         }
     }
 
-    private void onDeath(int playerIndex){
+    private void onMazeCompletion(int playerIndex){
+        // Player tmp = players[playerIndex];
+        onDeath(playerIndex);
+    }
+
+    public void onDeath(int playerIndex){
         players[playerIndex].isDead = true;
         players[playerIndex].score = calc_score(players[playerIndex]);
         // players[playerIndex].player_GO.SetActive(false);
@@ -303,6 +477,13 @@ public class NeatManager : MonoBehaviour
         isDeadCount++;
     }
 
+    private float calc_global_fitness(){
+        float sum = 0;
+        foreach (Species s in species){
+            sum += s.speciesFitness;
+        }
+        return sum/species.Count;
+    }
 
     private float calc_score(Player p){
         float dist_from_targ = Vector3.Distance(p.player_GO.transform.position, target_GO.transform.position);
@@ -313,10 +494,15 @@ public class NeatManager : MonoBehaviour
         return change;
     }
 
-    private void onMazeCompletion(int playerIndex){
-        // Player tmp = players[playerIndex];
-        onDeath(playerIndex);
+
+    public void OnClickPause(){
+        pauseNextGen = true;
     }
+    public void OnClickPlay(){
+        pause = false;
+        pauseNextGen = false;
+    }
+
 
     public int getPlayerIndexFromObj(GameObject p_obj){
         for (int i = 0; i < players.Count; i++){
@@ -382,36 +568,71 @@ public class NeatManager : MonoBehaviour
 
         if (Physics.Raycast(p.player_GO.transform.position, p.player_GO.transform.forward, out hit, Mathf.Infinity, layerMask)){
             distances.Add(Vector3.Distance(p.player_GO.transform.position, hit.transform.position));
-            Debug.DrawRay(p.player_GO.transform.position, p.player_GO.transform.forward, Color.green);
+            // Debug.DrawRay(p.player_GO.transform.position, p.player_GO.transform.forward, Color.green);
         }
         if (Physics.Raycast(p.player_GO.transform.position, forward_right, out hit, Mathf.Infinity, layerMask)){
             distances.Add(Vector3.Distance(p.player_GO.transform.position, hit.transform.position));
-            Debug.DrawRay(p.player_GO.transform.position, forward_right, Color.green);
+            // Debug.DrawRay(p.player_GO.transform.position, forward_right, Color.green);
         }
         if (Physics.Raycast(p.player_GO.transform.position, p.player_GO.transform.right, out hit, Mathf.Infinity, layerMask)){
             distances.Add(Vector3.Distance(p.player_GO.transform.position, hit.transform.position));
-            Debug.DrawRay(p.player_GO.transform.position, p.player_GO.transform.right, Color.green);
+            // Debug.DrawRay(p.player_GO.transform.position, p.player_GO.transform.right, Color.green);
         }
         if (Physics.Raycast(p.player_GO.transform.position, back_right, out hit, Mathf.Infinity, layerMask)){
             distances.Add(Vector3.Distance(p.player_GO.transform.position, hit.transform.position));
-            Debug.DrawRay(p.player_GO.transform.position, back_right, Color.green);
+            // Debug.DrawRay(p.player_GO.transform.position, back_right, Color.green);
         }
         if (Physics.Raycast(p.player_GO.transform.position, -p.player_GO.transform.forward, out hit, Mathf.Infinity, layerMask)){
             distances.Add(Vector3.Distance(p.player_GO.transform.position, hit.transform.position));
-            Debug.DrawRay(p.player_GO.transform.position, -p.player_GO.transform.forward, Color.green);
+            // Debug.DrawRay(p.player_GO.transform.position, -p.player_GO.transform.forward, Color.green);
         }
         if (Physics.Raycast(p.player_GO.transform.position, back_left, out hit, Mathf.Infinity, layerMask)){
             distances.Add(Vector3.Distance(p.player_GO.transform.position, hit.transform.position));
-            Debug.DrawRay(p.player_GO.transform.position, back_left, Color.green);
+            // Debug.DrawRay(p.player_GO.transform.position, back_left, Color.green);
         }
         if (Physics.Raycast(p.player_GO.transform.position, -p.player_GO.transform.right, out hit, Mathf.Infinity, layerMask)){
             distances.Add(Vector3.Distance(p.player_GO.transform.position, hit.transform.position));
-            Debug.DrawRay(p.player_GO.transform.position, -p.player_GO.transform.right, Color.green);
+            // Debug.DrawRay(p.player_GO.transform.position, -p.player_GO.transform.right, Color.green);
         }
         if (Physics.Raycast(p.player_GO.transform.position, forward_left, out hit, Mathf.Infinity, layerMask)){
             distances.Add(Vector3.Distance(p.player_GO.transform.position, hit.transform.position));
-            Debug.DrawRay(p.player_GO.transform.position, forward_left, Color.green);
+            // Debug.DrawRay(p.player_GO.transform.position, forward_left, Color.green);
         }
         return distances;
+    }
+
+    public void OnClickSave(){
+        saveNextGen = true;
+    }
+
+    public void OnClickTrain(){
+        mode = Mode.TRAINING;
+        pause = false;
+
+        spawnPopulation();
+    }
+
+    public void OnClickTest(){
+        mode = Mode.TESTING;
+        int save_num;
+        Debug.Log("WHICH SAVE: " + whichSave.text);
+        try {
+            save_num = int.Parse(whichSave.text);
+        }
+        catch {
+            Debug.LogError("Failed To Get Save Num. Loading Save 0");
+            save_num = 0;
+        }
+
+
+
+        // pause = false;
+        NeatNetwork network = NeatNetwork.createNetworkFromSave(save_num, this);
+        Player p = spawnPlayer(network, startPos);
+        players.Add(p);
+        populationSize = 1;
+
+        pause = false;
+
     }
 }
