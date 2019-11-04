@@ -7,9 +7,9 @@ public class PlayerController : MonoBehaviour
     public Rigidbody rb;
     NeatManager networkManager;
 
-    private float force_mult = 7.0f; //7 is good
-    private float speed = 0.1f;
-    private float rot_speed = .2f; //0.2 for build, 5.0 for editor
+    private float force_mult = 8.0f; //7 is good
+    private float speed = 12; //10 for frameInd, else 0.2
+    private float rot_speed = 120.0f; //0.2 for build, 5.0 for editor, 20 for frameInd
 
     void Awake(){
         rb = GetComponent<Rigidbody>();
@@ -76,9 +76,27 @@ public class PlayerController : MonoBehaviour
     }
 
     public void moveForwardWithRot(float horiz){
-        horiz *= 1 * rot_speed;
+        horiz *= Time.deltaTime * rot_speed;
         transform.eulerAngles += new Vector3(0, horiz, 0);
-        rb.MovePosition(transform.position + (transform.forward * speed * 1));
+        rb.MovePosition(transform.position + (transform.forward * speed * Time.deltaTime));
+    }
+
+    public void applyStrictForce(Matrix outputs){
+        if (outputs.get(0) > outputs.get(1)){
+
+            rb.AddForce((Vector3.forward * 1.0f) * force_mult * Time.deltaTime, ForceMode.Impulse);
+        }
+        else {
+            rb.AddForce((Vector3.forward * -1.0f) * force_mult * Time.deltaTime, ForceMode.Impulse);
+
+        }
+        if (outputs.get(2) > outputs.get(3)){
+            rb.AddForce((Vector3.right * 1.0f) * force_mult * Time.deltaTime, ForceMode.Impulse);
+        }
+        else {
+            rb.AddForce((Vector3.right * -1.0f) * force_mult * Time.deltaTime, ForceMode.Impulse);
+
+        }
     }
 
 

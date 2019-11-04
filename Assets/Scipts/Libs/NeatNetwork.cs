@@ -518,9 +518,6 @@ public class NeatNetwork
     }
 
     public Matrix feedForward2(List<float> inputs){
-        // if (tmp == 10){
-            // printNetwork("======== Network ========");
-        // }
         int i = 0;
         foreach (var n in nodes){
             if (n.Value.type == Node.Type.INPUT){
@@ -646,10 +643,6 @@ public class NeatNetwork
 
 
         return tmp_net;
-    }
-
-    public void drawNetwork(GameObject parent_holder){
-
     }
 
     public void printNetwork(string tag = ""){

@@ -28,8 +28,9 @@ public class NeatManager : MonoBehaviour
     public List<Species> species;
 
     //NETWORK VARS
-    public int input_size = 10;
-    public int output_size = 2;
+    public int input_size;
+    // public int input_size = 9;
+    public int output_size;
     public float MUTATION_RATE;
     public float ADD_CONNECTION_RATE;
     public float ADD_NODE_RATE;
@@ -46,6 +47,8 @@ public class NeatManager : MonoBehaviour
 
     //MISC
     public TextMeshProUGUI current_gen_tmp;
+    public string tag;
+    public TextMeshProUGUI tag_tmp;
 
     //FILE WRITING VARS
     private int numGensToWrite = 150;
@@ -61,8 +64,8 @@ public class NeatManager : MonoBehaviour
     private bool pause = false;
 
     //NETWORK DRAWING VARS
+    NetworkDraw networkDraw;
     private NeatNetwork network_to_draw;
-    public GameObject networkParentHolder;
 
     //MAZE GEN VARS
     private int newMazeAfter = 50;
@@ -77,18 +80,21 @@ public class NeatManager : MonoBehaviour
         this.mode = Mode.TRAINING;
         this.pause = true;
 
+        this.networkDraw = GameObject.Find("NetworkDrawer").GetComponent<NetworkDraw>();
+
         // spawnPopulation();
         gatePositions = getGatePositions();
 
 
-
+        this.tag_tmp.text = "" + tag;
     }
 
     void Update(){
         if (pause){ return; }
         run();
+        networkDraw.draw(network_to_draw);
         // Debug.Log(calc_score(players[0]));
-        // network_to_draw.drawNetwork(networkParentHolder);
+
 
     }
 
@@ -105,18 +111,20 @@ public class NeatManager : MonoBehaviour
 
             List<float> dists = getRaycastDistances(players[i]);
             if (dists.Count != 8){ continue; }
+            // if (dists.Count != 5){ continue; }
             List<float> inputs = createInputList(dists, players[i]);
             Matrix outputs = players[i].network.feedForward2(inputs);
-            // outputs = outputs.normalize();
-            // players[i].controller.applyForceOnAxis(outputs.get(0), outputs.get(1), true);
+            outputs = outputs.normalize();
+            players[i].controller.applyForceOnAxis(outputs.get(0), outputs.get(1), true);
             // players[i].controller.moveForwardWithRot(outputs.get(0));
-            players[i].controller.moveForwardWithRot(outputs.getVectorMaxIndex() == 0 ? -1.0f : 1.0f);
+            // players[i].controller.moveForwardWithRot(outputs.getVectorMaxIndex() == 0 ? -1.0f : 1.0f);
+            // players[i].controller.applyStrictForce(outputs);
 
             if (global_counter.isOver()){
                 onDeath(i);
             }
-            // players[i].checkIfStuck(i);
-            players[i].checkIfInLoop(i);
+            players[i].checkIfStuck(i);
+            // players[i].checkIfInLoop(i);
             players[i].lastPos = players[i].player_GO.transform.position;
 
         }
@@ -223,12 +231,12 @@ public class NeatManager : MonoBehaviour
         }
         Debug.Log("GLOBAL FITNESS: " + calc_global_fitness() + " At gen: " + gen_counter);
         // string tmp = calc_global_fitness:
-        float global_fit = calc_global_fitness();
-        string tmp = System.String.Format("{0:0.00}", global_fit);
-        if (global_fit < 10.0f){
-            tmp = "0"  + tmp;
-        }
-        all_fitnesses += tmp + ",";
+        // float global_fit = calc_global_fitness();
+        // string tmp = System.String.Format("{0:0.00}", global_fit);
+        // if (global_fit < 10.0f){
+        //     tmp = "0"  + tmp;
+        // }
+        // all_fitnesses += tmp + ",";
 
 
         // if (gen_counter == numGensToWrite){
@@ -239,9 +247,9 @@ public class NeatManager : MonoBehaviour
         //     }
         // }
 
-        if (saveNextGen || (gen_counter % 300 == 0 && gen_counter > 0)){
-            saveBestModel();
-        }
+        // if (saveNextGen || (gen_counter % 300 == 0 && gen_counter > 0)){
+        //     saveBestModel();
+        // }
 
         // if (gen_counter % newMazeAfter == 0 && gen_counter > 0){
         //     GameObject.Find("MazeGenerator").GetComponent<MazeGenerator>().OnClickGenerateMaze();
@@ -436,11 +444,7 @@ public class NeatManager : MonoBehaviour
 
     private List<float> createInputList(List<float> ray_dists, Player p){
         List<float> inputs = new List<float>();
-        // for (int i = 0; i < ray_dists.Count; i++){
-        //     inputs.Add(ray_dists[i]);
-        // }
-        // inputs.Add(target_GO.transform.position.x);
-        // inputs.Add(target_GO.transform.position.z);
+        Vector2 velocity = vector3_to_vector2(p.controller.rb.velocity, "y");
 
         for (int i = 0; i < input_size; i++){
             if (i < ray_dists.Count){
@@ -452,6 +456,33 @@ public class NeatManager : MonoBehaviour
             else if (i == 9){
                 inputs.Add(target_GO.transform.position.z);
             }
+            else if (i == 10){
+                inputs.Add(p.player_GO.transform.position.x);
+            }
+            else if (i == 11){
+                inputs.Add(p.player_GO.transform.position.z);
+            }
+            else if (i == 12){
+                inputs.Add(velocity.x);
+            }
+            else if (i == 13){
+                inputs.Add(velocity.y);
+            }
+            // if (i < ray_dists.Count){
+            //     inputs.Add(ray_dists[i]);
+            // }
+            // else if (i == 5){
+            //     inputs.Add(target_GO.transform.position.x);
+            // }
+            // else if (i == 6){
+            //     inputs.Add(target_GO.transform.position.z);
+            // }
+            // else if (i == 7){
+            //     inputs.Add(p.player_GO.transform.position.x);
+            // }
+            // else if (i == 8){
+            //     inputs.Add(p.player_GO.transform.position.z);
+            // }
         }
 
         return inputs;
@@ -582,15 +613,15 @@ public class NeatManager : MonoBehaviour
         }
     }
 
-    public Vector3 vector2_to_vector3(Vector2 orig, string dropAxis){
-        if (dropAxis == "y"){
-            return new Vector3(orig.x, 0, orig.y);
+    public Vector3 vector2_to_vector3(Vector2 orig, string addAxis, float fillWith){
+        if (addAxis == "y"){
+            return new Vector3(orig.x, fillWith, orig.y);
         }
-        if (dropAxis== "x"){
-            return new Vector3(0, orig.x, orig.y);
+        if (addAxis== "x"){
+            return new Vector3(fillWith, orig.x, orig.y);
         }
         else {
-            return new Vector3(orig.x, orig.y, 0);
+            return new Vector3(orig.x, orig.y, fillWith);
         }
     }
 
@@ -604,6 +635,7 @@ public class NeatManager : MonoBehaviour
     }
 
     private List<float> getRaycastDistances(Player p){
+        // Debug.Log("player : " + p.player_GO.name + " vel: " + p.controller.rb.velocity, gameObject);
          RaycastHit hit;
          Vector3 forward_right = getDirBetween(p.player_GO.transform.forward, p.player_GO.transform.right);
          Vector3 forward_left = getDirBetween(p.player_GO.transform.forward, -p.player_GO.transform.right);
@@ -645,6 +677,83 @@ public class NeatManager : MonoBehaviour
             // Debug.DrawRay(p.player_GO.transform.position, forward_left, Color.green);
         }
         return distances;
+    }
+
+    private List<float> getRaycastDistances2(Player p) {
+
+         RaycastHit hit;
+         Vector3 forward_right2 = getDirBetween(p.player_GO.transform.forward, p.player_GO.transform.right);
+         Vector3 forward_left2 = getDirBetween(p.player_GO.transform.forward, -p.player_GO.transform.right);
+         Vector3 back_right = getDirBetween(-p.player_GO.transform.forward, p.player_GO.transform.right);
+         Vector3 back_left = getDirBetween(-p.player_GO.transform.forward, -p.player_GO.transform.right);
+
+        List<float> distances = new List<float>();
+
+        Vector3 player_forward = p.controller.rb.velocity.normalized;
+        Vector3 forward_right = getDirBetween(-getPerpendicularVector(player_forward), player_forward);
+        Vector3 forward_left = getDirBetween(getPerpendicularVector(player_forward), player_forward);
+        // Debug.Log("player : " + p.player_GO.name + " vel: " + player_forward, gameObject);
+
+        if (Physics.Raycast(p.player_GO.transform.position, player_forward, out hit, Mathf.Infinity, layerMask)){
+            distances.Add(Vector3.Distance(p.player_GO.transform.position, hit.transform.position));
+            Debug.DrawRay(p.player_GO.transform.position, player_forward, Color.green);
+        }
+        else if (Physics.Raycast(p.player_GO.transform.position, p.player_GO.transform.forward, out hit, Mathf.Infinity, layerMask)){
+            distances.Add(Vector3.Distance(p.player_GO.transform.position, hit.transform.position));
+            // Debug.DrawRay(p.player_GO.transform.position, p.player_GO.transform.forward, Color.green);
+        }
+        if (Physics.Raycast(p.player_GO.transform.position, getPerpendicularVector(player_forward), out hit, Mathf.Infinity, layerMask)){
+            distances.Add(Vector3.Distance(p.player_GO.transform.position, hit.transform.position));
+            Debug.DrawRay(p.player_GO.transform.position, getPerpendicularVector(player_forward), Color.green);
+        }
+        else if (Physics.Raycast(p.player_GO.transform.position, -p.player_GO.transform.right, out hit, Mathf.Infinity, layerMask)){
+            distances.Add(Vector3.Distance(p.player_GO.transform.position, hit.transform.position));
+            // Debug.DrawRay(p.player_GO.transform.position, p.player_GO.transform.forward, Color.green);
+        }
+        if (Physics.Raycast(p.player_GO.transform.position, -getPerpendicularVector(player_forward), out hit, Mathf.Infinity, layerMask)){
+            distances.Add(Vector3.Distance(p.player_GO.transform.position, hit.transform.position));
+            Debug.DrawRay(p.player_GO.transform.position, -getPerpendicularVector(player_forward), Color.green);
+        }
+        else if (Physics.Raycast(p.player_GO.transform.position, p.player_GO.transform.right, out hit, Mathf.Infinity, layerMask)){
+            distances.Add(Vector3.Distance(p.player_GO.transform.position, hit.transform.position));
+            // Debug.DrawRay(p.player_GO.transform.position, p.player_GO.transform.forward, Color.green);
+        }
+        if (Physics.Raycast(p.player_GO.transform.position, forward_right, out hit, Mathf.Infinity, layerMask)){
+            distances.Add(Vector3.Distance(p.player_GO.transform.position, hit.transform.position));
+            Debug.DrawRay(p.player_GO.transform.position, forward_right, Color.green);
+        }
+        else if (Physics.Raycast(p.player_GO.transform.position, forward_right2, out hit, Mathf.Infinity, layerMask)){
+            distances.Add(Vector3.Distance(p.player_GO.transform.position, hit.transform.position));
+            // Debug.DrawRay(p.player_GO.transform.position, p.player_GO.transform.forward, Color.green);
+        }
+        if (Physics.Raycast(p.player_GO.transform.position, forward_left, out hit, Mathf.Infinity, layerMask)){
+            distances.Add(Vector3.Distance(p.player_GO.transform.position, hit.transform.position));
+            Debug.DrawRay(p.player_GO.transform.position, forward_left, Color.green);
+        }
+        else if (Physics.Raycast(p.player_GO.transform.position, forward_left2, out hit, Mathf.Infinity, layerMask)){
+            distances.Add(Vector3.Distance(p.player_GO.transform.position, hit.transform.position));
+            // Debug.DrawRay(p.player_GO.transform.position, p.player_GO.transform.forward, Color.green);
+        }
+        // if (Physics.Raycast(p.player_GO.transform.position, back_right, out hit, Mathf.Infinity, layerMask)){
+        //     distances.Add(Vector3.Distance(p.player_GO.transform.position, hit.transform.position));
+        //     // Debug.DrawRay(p.player_GO.transform.position, back_right, Color.green);
+        // }
+        // if (Physics.Raycast(p.player_GO.transform.position, -p.player_GO.transform.forward, out hit, Mathf.Infinity, layerMask)){
+        //     distances.Add(Vector3.Distance(p.player_GO.transform.position, hit.transform.position));
+        //     // Debug.DrawRay(p.player_GO.transform.position, -p.player_GO.transform.forward, Color.green);
+        // }
+        // if (Physics.Raycast(p.player_GO.transform.position, back_left, out hit, Mathf.Infinity, layerMask)){
+        //     distances.Add(Vector3.Distance(p.player_GO.transform.position, hit.transform.position));
+        //     // Debug.DrawRay(p.player_GO.transform.position, back_left, Color.green);
+        // }
+
+        return distances;
+    }
+
+    private Vector3 getPerpendicularVector(Vector3 orig){
+        Vector2 tmp = vector3_to_vector2(orig, "y");
+        tmp = Vector2.Perpendicular(tmp);
+        return vector2_to_vector3(tmp, "y", 0.0f);
     }
 
     public void OnClickSave(){
