@@ -12287,11 +12287,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2dde4d388079aa548b7c7ed9751f2889, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  mazeHolder: {fileID: 1849373314}
-  barrierSizeRange: {x: 1, y: 5}
-  barrierPosRange_x: {x: -47, y: 47}
-  barrierPosRange_y: {x: -47, y: 47}
-  barrierCountRange: {x: 120, y: 150}
+  pairs: {fileID: 576436014}
+  numBarriers: 4
+  floorRange_x: {x: -50, y: 50}
+  floorRange_z: {x: -50, y: 50}
 --- !u!4 &1348793074
 Transform:
   m_ObjectHideFlags: 0
@@ -12834,7 +12833,7 @@ MonoBehaviour:
   mode: 0
   playerPrefab: {fileID: 4368044974361140112, guid: a8d54db5824236d47bb345c52e1f1149,
     type: 3}
-  populationSize: 150
+  populationSize: 100
   input_size: 10
   output_size: 2
   MUTATION_RATE: 0.25

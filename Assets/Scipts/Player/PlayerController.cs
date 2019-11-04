@@ -8,8 +8,8 @@ public class PlayerController : MonoBehaviour
     NeatManager networkManager;
 
     private float force_mult = 7.0f; //7 is good
-    private float speed = 10.0f;
-    private float rot_speed = 100.0f;
+    private float speed = 0.1f;
+    private float rot_speed = .2f; //0.2 for build, 5.0 for editor
 
     void Awake(){
         rb = GetComponent<Rigidbody>();
@@ -17,24 +17,28 @@ public class PlayerController : MonoBehaviour
     }
 
     void Update(){
-        handleMovement();
+        // handleMovement();
 
         // Debug.Log("Mag: " + rb.velocity.magnitude + " || "  + gameObject.name, gameObject);
     }
 
     private void handleMovement(){
          if (Input.GetKey(KeyCode.A)){
-            //  applyForceOnSide(2);
+             applyForceOnSide(2, 1);
          }
          if (Input.GetKey(KeyCode.D)){
-            //  applyForceOnSide(3);
+             applyForceOnSide(3, 1);
          }
          if (Input.GetKey(KeyCode.W)){
-            //  applyForceOnSide(0);
+             applyForceOnSide(0, 1);
          }
          if (Input.GetKey(KeyCode.S)){
-            //  applyForceOnSide(1);
+             applyForceOnSide(1, 1);
          }
+    }
+
+    public void applyHorizontalForce(float val1, float val2){
+
     }
 
     public void applyForceOnSide(int side, float amount){
@@ -72,9 +76,9 @@ public class PlayerController : MonoBehaviour
     }
 
     public void moveForwardWithRot(float horiz){
-        horiz *= Time.deltaTime * rot_speed;
+        horiz *= 1 * rot_speed;
         transform.eulerAngles += new Vector3(0, horiz, 0);
-        rb.MovePosition(transform.position + (transform.forward * speed * Time.deltaTime));
+        rb.MovePosition(transform.position + (transform.forward * speed * 1));
     }
 
 

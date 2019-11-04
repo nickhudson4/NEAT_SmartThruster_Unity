@@ -87,7 +87,8 @@ public class NeatManager : MonoBehaviour
     void Update(){
         if (pause){ return; }
         run();
-        network_to_draw.drawNetwork(networkParentHolder);
+        // Debug.Log(calc_score(players[0]));
+        // network_to_draw.drawNetwork(networkParentHolder);
 
     }
 
@@ -97,23 +98,25 @@ public class NeatManager : MonoBehaviour
             players[i].network.tmp = i;
             float distFromStartPos = Vector3.Distance(startPos, players[i].player_GO.transform.position);
             // Debug.Log("DIST: " + distFromStartPos, players[i].player_GO);
-            if (global_counter.currentCount() >= 10.0f && distFromStartPos <= 10.0f){
-                Debug.Log("KILLED");
-                onDeath(i);
-            }
+            // if (global_counter.currentCount() >= 10.0f && distFromStartPos <= 10.0f){
+            //     Debug.Log("KILLED");
+            //     onDeath(i);
+            // }
 
             List<float> dists = getRaycastDistances(players[i]);
             if (dists.Count != 8){ continue; }
             List<float> inputs = createInputList(dists, players[i]);
             Matrix outputs = players[i].network.feedForward2(inputs);
-            outputs = outputs.normalize();
-            players[i].controller.applyForceOnAxis(outputs.get(0), outputs.get(1), true);
+            // outputs = outputs.normalize();
+            // players[i].controller.applyForceOnAxis(outputs.get(0), outputs.get(1), true);
             // players[i].controller.moveForwardWithRot(outputs.get(0));
+            players[i].controller.moveForwardWithRot(outputs.getVectorMaxIndex() == 0 ? -1.0f : 1.0f);
 
             if (global_counter.isOver()){
                 onDeath(i);
             }
-            players[i].checkIfStuck(i);
+            // players[i].checkIfStuck(i);
+            players[i].checkIfInLoop(i);
             players[i].lastPos = players[i].player_GO.transform.position;
 
         }
@@ -330,9 +333,9 @@ public class NeatManager : MonoBehaviour
             Vector3 tmp_pos_2 = p2.position;
             tmp_pos_2.x -= p2.localScale.x / 2;
             Vector3 newPos = (tmp_pos_1 + tmp_pos_2) / 2;
-            GameObject prim = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            prim.transform.localScale = new Vector3(2,2,2);
-            prim.transform.position = newPos;
+            // GameObject prim = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            // prim.transform.localScale = new Vector3(2,2,2);
+            // prim.transform.position = newPos;
             tmp_rtn.Add(newPos);
         }
         return tmp_rtn;
@@ -486,12 +489,54 @@ public class NeatManager : MonoBehaviour
     }
 
     private float calc_score(Player p){
-        float dist_from_targ = Vector3.Distance(p.player_GO.transform.position, target_GO.transform.position);
-        float total_dist = Vector3.Distance(startPos, target_GO.transform.position);
-        float change = total_dist - dist_from_targ;
-        if (change < 0){ change = 0; }
+        // float dist_from_targ = Vector3.Distance(p.player_GO.transform.position, target_GO.transform.position);
+        // float total_dist = Vector3.Distance(startPos, target_GO.transform.position);
+        // float change = total_dist - dist_from_targ;
+        // if (change < 0){ change = 0; }
 
-        return change;
+        // return change;
+
+        Transform p_transform = p.player_GO.transform;
+        Vector3 current_gate = Vector3.zero;
+        Vector3 next_gate = Vector3.zero;
+        int current_gate_index = 0;
+        for (int i = 0; i < gatePositions.Count; i++){
+            if (p_transform.position.z > gatePositions[i].z){
+                current_gate = gatePositions[i];
+                current_gate_index = i + 1;
+                if (i == gatePositions.Count - 1){ //current_gate == last gate
+                    next_gate = target_GO.transform.position; //next_gate = target
+                }
+                else {
+                    next_gate = gatePositions[i+1];
+                }
+            }
+        }
+
+        if (current_gate == Vector3.zero){
+            next_gate = gatePositions[0];
+        }
+
+        float already_completed = current_gate_index * 1.5f;
+        float cur_full = Vector3.Distance(current_gate, next_gate);
+        float cur_completed = Vector3.Distance(current_gate, p_transform.position);
+        float cur_toGo = Vector3.Distance(p_transform.position, next_gate);
+        float cur_full_with_error = cur_completed + cur_toGo;
+        float percent_with_error = cur_completed / cur_full_with_error;
+        float error = 1 - (cur_full / cur_full_with_error);
+        float percent_with_errorsubbed = percent_with_error - error;
+
+        float final_completed = already_completed + percent_with_errorsubbed;
+
+        // if (final_completed < already_completed){ final_completed = already_completed; }
+        if (final_completed < 0.0f){ final_completed = 0.0f; }
+
+        return final_completed;
+
+
+        // if (score < 0){ score = 0; }
+
+        // return score;
     }
 
 
@@ -548,6 +593,7 @@ public class NeatManager : MonoBehaviour
             return new Vector3(orig.x, orig.y, 0);
         }
     }
+
 
     public void printFloatList(List<float> l){
         string concat = "";

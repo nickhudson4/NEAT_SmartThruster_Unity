@@ -154,6 +154,20 @@ public class Matrix
         return res;
     }
 
+    public int getVectorMaxIndex(){
+        float max = -10000.0f;
+        int maxIndex = -1;
+        
+        for (int i = 0; i < rows; i++){
+            if (main[i][0] > max){
+                max = main[i][0];
+                maxIndex = i;
+            }
+        }
+
+        return maxIndex;
+    }
+
     public Matrix sigmoid(){
         return 1.0f / (1.0f + matrix_exp());
     }
