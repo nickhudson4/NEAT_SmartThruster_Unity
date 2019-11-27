@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using TMPro;
 
 public class MazeGenerator : MonoBehaviour
 {
@@ -11,15 +12,24 @@ public class MazeGenerator : MonoBehaviour
     // public Vector2 barrierCountRange;
 
     public GameObject pairs;
-    public int numBarriers;
+    public TMP_InputField numBarriersInput;
+    private int numBarriers;
     public Vector2 floorRange_x;
     public Vector2 floorRange_z;
 
 
     public void OnClickGenerateMaze(){
+        try {
+            numBarriers = int.Parse(numBarriersInput.text);
+        }
+        catch {
+            Debug.LogError("Failed To Get Save Num. Loading Save 0");
+            numBarriers = 4;
+        }
+
         float floorSize = Mathf.Abs(floorRange_x.x) + Mathf.Abs(floorRange_x.y);
         float sectionSize = floorSize / (numBarriers + 1);
-    
+
         for (int i = 0; i < pairs.transform.childCount; i++){
             GameObject child = pairs.transform.GetChild(i).gameObject;
             Destroy(child);
@@ -46,8 +56,14 @@ public class MazeGenerator : MonoBehaviour
             prim1.transform.parent = pairs.transform;
             prim2.transform.parent = pairs.transform;
 
+            prim1.tag = "MazeWall";
+            prim2.tag = "MazeWall";
+            prim1.layer = 9;
+            prim2.layer = 9;
+
 
         }
+        GameObject.Find("NeatManager").GetComponent<NeatManager>().getGatePositions();
 
 
 

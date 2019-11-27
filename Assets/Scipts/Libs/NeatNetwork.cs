@@ -7,21 +7,12 @@ using System.Linq;
 
 public class NeatNetwork
 {
-    // public List<Node> nodes;
+    public NeatManager manager;
+
     public Dictionary<int, Node> nodes;
     public List<Connection> connections;
-    // public Dictionary<int, Connection> connections;
     public int input_size;
     public int output_size;
-
-    // private int _innov_counter;
-    // public int innov_counter{
-    //     get
-    //     {
-    //         _innov_counter++;
-    //         return _innov_counter - 1;
-    //     }
-    // }
 
     public float fitness;
     public float bias;
@@ -29,11 +20,12 @@ public class NeatNetwork
     public int tmp;
 
 
-    public NeatNetwork(int input_size, int output_size, bool fill){
+    public NeatNetwork(int input_size, int output_size, bool fill, NeatManager manager){
+        this.manager = manager;
+
         this.input_size = input_size;
         this.output_size = output_size;
         this.nodes = new Dictionary<int, Node>();
-        // this.connections = new Dictionary<int, Connection>();
         this.connections = new List<Connection>();
 
         if (fill){
@@ -386,6 +378,8 @@ public class NeatNetwork
             bool p1_contains = parent1.containsInnov(p.Key);
             bool p2_contains = parent2.containsInnov(p.Key);
 
+            if (!p1_contains && !p2_contains){ continue; }
+
             if (p1_contains && !p2_contains){
                 if (parent1_fitest){
                     Connection currCon = parent1.getConnectionFromInnov(p.Key);
@@ -462,7 +456,7 @@ public class NeatNetwork
             }
         }
 
-        NeatNetwork newNet = new NeatNetwork(parent1.input_size, parent1.output_size, false);
+        NeatNetwork newNet = new NeatNetwork(parent1.input_size, parent1.output_size, false, parent1.manager);
         newNet.nodes = newNodes;
         newNet.connections = newConnections;
         int randomParent = Random.Range(0, 2);
@@ -547,7 +541,6 @@ public class NeatNetwork
             outputs.insert(nodes[out_nodes[j]].currentValue, j);
         }
 
-        // outputs.printMatrix("********** OUTPUTS **********");
         return outputs;
     }
 
@@ -566,6 +559,16 @@ public class NeatNetwork
                 }
             }
         }
+    }
+
+    public int getNumActiveConnections(){
+        int counter = 0;
+        foreach (Connection c in connections){
+            if (c.enabled){
+                counter++;
+            }
+        }
+        return counter;
     }
 
     public void saveNetwork(){
@@ -600,7 +603,6 @@ public class NeatNetwork
         int j = 0;
         foreach (Connection c in connections){
             string json = JsonUtility.ToJson(c);
-            Debug.Log("JSON: " + json);
 
             using (StreamWriter w = File.AppendText(child_path + "/connections/connection" + j + ".json"))
             {
@@ -609,7 +611,7 @@ public class NeatNetwork
             j++;
         }
 
-        NeatNetwork tmp = new NeatNetwork(10, 2, false);
+        NeatNetwork tmp = new NeatNetwork(10, 2, false, GameObject.Find("NeatManager").GetComponent<NeatManager>());
 
     }
 
@@ -635,7 +637,7 @@ public class NeatNetwork
             Connection c = JsonUtility.FromJson<Connection>(json_string);
             my_connections.Add(c);
         }
-        NeatNetwork tmp_net = new NeatNetwork(manager.input_size, manager.output_size, false);
+        NeatNetwork tmp_net = new NeatNetwork(manager.input_size, manager.output_size, false, manager);
         tmp_net.nodes = my_nodes;
         tmp_net.connections = my_connections;
         tmp_net.bias = my_nodes[0].bias;

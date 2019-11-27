@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 using TMPro;
 using System.IO;
 
@@ -16,13 +17,14 @@ public class NeatManager : MonoBehaviour
 
     //POPULATION VARS
     public GameObject playerPrefab;
-    private Vector3 startPos = new Vector3(0.0f, 0.8f, -47.0f);
+    private Vector3 startPos = new Vector3(0.0f, 0.8f, -45.0f);
     public int populationSize = 100;
     public List<Player> players;
     private int isDeadCount = 0;
     private float maxRuntime = 75.0f;
     private Counter global_counter;
     private int gen_counter = 0;
+    private bool renderPlayers = true;
 
     //SPECIES VARS
     public List<Species> species;
@@ -65,11 +67,12 @@ public class NeatManager : MonoBehaviour
 
     //NETWORK DRAWING VARS
     NetworkDraw networkDraw;
-    private NeatNetwork network_to_draw;
+    private int indexToDraw;
 
     //MAZE GEN VARS
-    private int newMazeAfter = 50;
+    private int newMazeAfter = 150;
 
+    private float speed = 100.0f;
 
     void Start(){
         this.species = new List<Species>();
@@ -83,7 +86,7 @@ public class NeatManager : MonoBehaviour
         this.networkDraw = GameObject.Find("NetworkDrawer").GetComponent<NetworkDraw>();
 
         // spawnPopulation();
-        gatePositions = getGatePositions();
+        getGatePositions();
 
 
         this.tag_tmp.text = "" + tag;
@@ -92,7 +95,6 @@ public class NeatManager : MonoBehaviour
     void Update(){
         if (pause){ return; }
         run();
-        networkDraw.draw(network_to_draw);
         // Debug.Log(calc_score(players[0]));
 
 
@@ -101,21 +103,24 @@ public class NeatManager : MonoBehaviour
     private void run(){
         for (int i = 0; i < players.Count; i++){
             if (players[i].isDead || players[i].player_GO == null){ continue; }
+            if (!isInBounds(players[i].player_GO.transform.position)){
+                Debug.Log("Player: " + players[i].player_GO.name + " Out of bounds! ", players[i].player_GO);
+                onDeath(i);
+            }
             players[i].network.tmp = i;
-            float distFromStartPos = Vector3.Distance(startPos, players[i].player_GO.transform.position);
-            // Debug.Log("DIST: " + distFromStartPos, players[i].player_GO);
-            // if (global_counter.currentCount() >= 10.0f && distFromStartPos <= 10.0f){
-            //     Debug.Log("KILLED");
-            //     onDeath(i);
-            // }
 
-            List<float> dists = getRaycastDistances(players[i]);
-            if (dists.Count != 8){ continue; }
+            // List<float> dists = getRaycastDistances(players[i]);
+            // if (dists.Count != 8){ continue; }
             // if (dists.Count != 5){ continue; }
-            List<float> inputs = createInputList(dists, players[i]);
+            // List<float> inputs = createInputList(dists, players[i]);
+            List<float> inputs = createInputList2(players[i]);
             Matrix outputs = players[i].network.feedForward2(inputs);
             outputs = outputs.normalize();
-            players[i].controller.applyForceOnAxis(outputs.get(0), outputs.get(1), true);
+            if (i == indexToDraw){
+                networkDraw.drawUpdate(inputs, outputs.toList());
+            }
+            // players[i].controller.applyForceOnAxis(outputs.get(0), outputs.get(1), true);
+            players[i].controller.applyTranslateOnAxis(outputs.get(0), outputs.get(1), speed);
             // players[i].controller.moveForwardWithRot(outputs.get(0));
             // players[i].controller.moveForwardWithRot(outputs.getVectorMaxIndex() == 0 ? -1.0f : 1.0f);
             // players[i].controller.applyStrictForce(outputs);
@@ -123,8 +128,8 @@ public class NeatManager : MonoBehaviour
             if (global_counter.isOver()){
                 onDeath(i);
             }
-            players[i].checkIfStuck(i);
-            // players[i].checkIfInLoop(i);
+            // players[i].checkIfStuck(i);
+            players[i].checkIfInLoop(i);
             players[i].lastPos = players[i].player_GO.transform.position;
 
         }
@@ -136,21 +141,55 @@ public class NeatManager : MonoBehaviour
         }
     }
 
+    private List<float> createInputList2(Player player){
+        List<float> tmp = new List<float>();
+        Transform p_trans = player.player_GO.transform;
+        tmp.Add(p_trans.position.x);
+        tmp.Add(p_trans.position.z);
+
+        Vector3 next_gate = Vector3.zero;
+        for (int i = 0; i < gatePositions.Count; i++){
+            if (p_trans.position.z > gatePositions[i].z){
+                if (i == gatePositions.Count - 1){
+                    next_gate = target_GO.transform.position;
+                    break;
+                }
+                else {
+                    next_gate = gatePositions[i+1];
+                }
+            }
+        }
+        if (next_gate == Vector3.zero){
+            next_gate = gatePositions[0];
+        }
+
+        tmp.Add(next_gate.x);
+        tmp.Add(next_gate.z);
+
+        return tmp;
+    }
+
+    private bool isInBounds(Vector3 pos){
+        // Debug.Log("POS: " + pos);
+        if (pos.z < -50.0f || pos.z > 50.0f || pos.x < -50.0f || pos.x > 50.0f){
+            Debug.Log("Return false");
+            return false;
+        }
+        return true;
+    }
+
 
     private void spawnPopulation(){
-        int rand_net_to_draw = Random.Range(0, populationSize);
-
         List<Player> tmp = new List<Player>();
         for (int i = 0; i < populationSize; i++){
             GameObject player = Instantiate(playerPrefab, startPos, Quaternion.identity);
+            if (!renderPlayers){
+                player.GetComponent<Renderer>().enabled = false;
+            }
             player.name = "Player_" + i;
-            NeatNetwork net = new NeatNetwork(input_size, output_size, true);
+            NeatNetwork net = new NeatNetwork(input_size, output_size, true, this);
             Player newPlayer = new Player(net, player, this);
             tmp.Add(newPlayer);
-
-            if (rand_net_to_draw == i){
-                network_to_draw = net;
-            }
         }
         players = tmp;
     }
@@ -208,7 +247,7 @@ public class NeatManager : MonoBehaviour
                 p.species = newSpecies;
             }
         }
-        Debug.Log("Num Species: " + species.Count);
+        // Debug.Log("Num Species: " + species.Count);
     }
 
     private void removeEmptySpecies(){
@@ -229,27 +268,12 @@ public class NeatManager : MonoBehaviour
             p.fitness = adjustedScore;
             p.network.fitness = adjustedScore;
         }
-        Debug.Log("GLOBAL FITNESS: " + calc_global_fitness() + " At gen: " + gen_counter);
-        // string tmp = calc_global_fitness:
-        // float global_fit = calc_global_fitness();
-        // string tmp = System.String.Format("{0:0.00}", global_fit);
-        // if (global_fit < 10.0f){
-        //     tmp = "0"  + tmp;
-        // }
-        // all_fitnesses += tmp + ",";
-
-
-        // if (gen_counter == numGensToWrite){
-        //     using (StreamWriter w = File.AppendText(Application.dataPath + "/StreamingAssets/test.txt"))
-        //     {
-        //         w.WriteLine("" + line_tag + " Pop Size: " + populationSize + " Mut Rate: " + MUTATION_RATE + " Add Conn Rate: " + ADD_CONNECTION_RATE + " Add Node Rate: " + ADD_NODE_RATE + " C1: " + c1 + " C2: " + c2 + " C3: " + c3 + " DT: " + DT);
-        //         w.WriteLine(line_tag + all_fitnesses);
-        //     }
-        // }
+        // Debug.Log("GLOBAL FITNESS: " + calc_global_fitness() + " At gen: " + gen_counter);
 
         // if (saveNextGen || (gen_counter % 300 == 0 && gen_counter > 0)){
-        //     saveBestModel();
-        // }
+        if (saveNextGen){
+            saveBestModel();
+        }
 
         // if (gen_counter % newMazeAfter == 0 && gen_counter > 0){
         //     GameObject.Find("MazeGenerator").GetComponent<MazeGenerator>().OnClickGenerateMaze();
@@ -258,7 +282,6 @@ public class NeatManager : MonoBehaviour
     }
 
     private void createNextGen(){
-        network_to_draw = getBestNetwork();
 
         List<Player> fittest = new List<Player>();
         foreach (Species s in species){
@@ -278,6 +301,9 @@ public class NeatManager : MonoBehaviour
                 fittest.Add(bestP);
             }
         }
+
+        indexToDraw = getBestPlayerIndex(fittest);
+        networkDraw.draw(fittest[indexToDraw].network);
         // foreach (Player p in players){ //% of players are mutated without crossover
         //     float rand = Random.Range(0.0f, 1.0f);
         //     if (rand <= .2f){
@@ -294,19 +320,14 @@ public class NeatManager : MonoBehaviour
             Species s = getRandSpeciesWithProbability(); //Get high fitness species
             Player p1 = getRandPlayerWithProbability(s); //Get high fitness player1 from species
             Player p2 = getRandPlayerWithProbability(s); //Get high fitness player2 from species
-            // p1.network.printNetwork("======== PARENT1 " + p1.player_GO.name + " with fitness: " + p1.fitness + " ========");
-            // p2.network.printNetwork("======== PARENT2 " + p2.player_GO.name + " with fitness: " + p2.fitness + " ========");
             NeatNetwork childNet = NeatNetwork.crossover(p1.network, p2.network);
-            // childNet.printNetwork("======= CHILD =======");
             float r1 = Random.Range(0.0f, 1.0f);
             float r2 = Random.Range(0.0f, 1.0f);
             float r3 = Random.Range(0.0f, 1.0f);
             if (r1 < MUTATION_RATE){
-                // Debug.Log("MUTATED");
                 childNet.mutate();
             }
             if (r2 < ADD_CONNECTION_RATE){
-                // Debug.Log("ADDED CONNECTION");
                 childNet.addConnection(null, null, true);
             }
             if (r3 < ADD_NODE_RATE){
@@ -330,7 +351,20 @@ public class NeatManager : MonoBehaviour
         players = fittest;
     }
 
-    private List<Vector3> getGatePositions(){
+    private int getBestPlayerIndex(List<Player> players){
+        float bestFitness = -1.0f;
+        int bestP = 0;
+        for (int i = 0; i < players.Count; i++){
+            if (players[i].fitness > bestFitness){
+                bestFitness = players[i].fitness;
+                bestP = i;
+            }
+        }
+
+        return bestP;
+    }
+
+    public void getGatePositions(){
         List<Vector3> tmp_rtn = new List<Vector3>();
         for (int i = 0; i < pairs.transform.childCount; i+=2){
             Transform p1 = pairs.transform.GetChild(i);
@@ -346,7 +380,7 @@ public class NeatManager : MonoBehaviour
             // prim.transform.position = newPos;
             tmp_rtn.Add(newPos);
         }
-        return tmp_rtn;
+        gatePositions = tmp_rtn;
     }
 
 
@@ -364,21 +398,11 @@ public class NeatManager : MonoBehaviour
         saveNextGen = false;
     }
 
-    private NeatNetwork getBestNetwork(){
-        float bestFitness = -1.0f;
-        NeatNetwork bestP = null;
-        foreach (Player p in players){
-            if (p.fitness > bestFitness){
-                bestFitness = p.fitness;
-                bestP = p.network;
-            }
-        }
-
-        return bestP;
-    }
-
     private Player spawnPlayer(NeatNetwork network, Vector3 pos){
         GameObject player = Instantiate(playerPrefab, pos, Quaternion.identity);
+        if (!renderPlayers){
+            player.GetComponent<Renderer>().enabled = false;
+        }
         player.name = "Player_" + Random.Range(0, 10000);
 
         Player newPlayer = new Player(network, player, this);
@@ -504,6 +528,7 @@ public class NeatManager : MonoBehaviour
     }
 
     public void onDeath(int playerIndex){
+        players[playerIndex].player_GO.name = players[playerIndex].player_GO.name + " (DEAD)";
         players[playerIndex].isDead = true;
         players[playerIndex].score = calc_score(players[playerIndex]);
         // players[playerIndex].player_GO.SetActive(false);
@@ -756,6 +781,10 @@ public class NeatManager : MonoBehaviour
         return vector2_to_vector3(tmp, "y", 0.0f);
     }
 
+    public void OnRenderToggleChange(Toggle change){
+        renderPlayers = change.isOn;
+    }
+
     public void OnClickSave(){
         saveNextGen = true;
     }
@@ -768,26 +797,21 @@ public class NeatManager : MonoBehaviour
     }
 
     public void OnClickTest(){
-        mode = Mode.TESTING;
-        int save_num;
-        Debug.Log("WHICH SAVE: " + whichSave.text);
-        try {
-            save_num = int.Parse(whichSave.text);
-        }
-        catch {
-            Debug.LogError("Failed To Get Save Num. Loading Save 0");
-            save_num = 0;
-        }
+        // mode = Mode.TESTING;
+        // int save_num;
+        // Debug.Log("WHICH SAVE: " + whichSave.text);
+        // try {
+        //     save_num = int.Parse(whichSave.text);
+        // }
+        // catch {
+        //     Debug.LogError("Failed To Get Save Num. Loading Save 0");
+        //     save_num = 0;
+        // }
 
-
-
+        // NeatNetwork network = NeatNetwork.createNetworkFromSave(save_num, this);
+        // Player p = spawnPlayer(network, startPos);
+        // players.Add(p);
+        // populationSize = 1;
         // pause = false;
-        NeatNetwork network = NeatNetwork.createNetworkFromSave(save_num, this);
-        Player p = spawnPlayer(network, startPos);
-        players.Add(p);
-        populationSize = 1;
-
-        pause = false;
-
     }
 }

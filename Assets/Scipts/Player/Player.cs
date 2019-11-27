@@ -26,7 +26,7 @@ public class Player
     public Counter outerCounter;
     public Counter innerCounter;
     Vector3 previousPos = Vector3.zero;
-    int maxFailedBeforeEnding = 10;
+    int maxFailedBeforeEnding = 5;
     float cutOffDist = 10.0f;
     int failedCounter = 0;
 
@@ -41,9 +41,9 @@ public class Player
         this.fitness = 0;
         this.isDead = false;
         this.stuckCounter = new Counter(2.0f);
-        
-        this.outerCounter = new Counter(6.0f);
-        this.innerCounter = new Counter(1.0f);
+
+        this.outerCounter = new Counter(4.0f);
+        this.innerCounter = new Counter(0.3f);
         this.previousPos = this.player_GO.transform.position;
     }
 
@@ -54,21 +54,22 @@ public class Player
     }
 
     public void checkIfStuck(int player_index){
-        Vector3 newPos = player_GO.transform.position;
-        float changeInPos = Vector3.Distance(lastPos, newPos);
+        // Vector3 newPos = player_GO.transform.position;
+        // float changeInPos = Vector3.Distance(lastPos, newPos);
+        // // Debug.Log("CHANGE: " + changeInPos + " COUNTER: " + stuckCounter.currentCount());
 
 
-        if (stuckCounter.isOver()){
-            manager.onDeath(player_index);
-            // Debug.Log("Player is stuck: " + player_GO, player_GO);
-        }
+        // if (stuckCounter.isOver()){
+        //     manager.onDeath(player_index);
+        //     // Debug.Log("Player is stuck: " + player_GO, player_GO);
+        // }
 
-        if (changeInPos <= 0.01f){
-            stuckCounter.incriment();
-        }
-        else {
-            stuckCounter.reset();
-        }
+        // if (changeInPos <= manager.speed / 150.0f){
+        //     stuckCounter.incriment();
+        // }
+        // else {
+        //     stuckCounter.reset();
+        // }
     }
 
     public void checkIfInLoop(int player_index){
@@ -80,17 +81,14 @@ public class Player
 
         if (innerCounter.isOver()){
             float dist = Vector3.Distance(player_GO.transform.position, previousPos);
-            Debug.Log("dist: " + dist, manager.players[player_index].player_GO);
             if (dist < cutOffDist){
                 failedCounter++;
-                Debug.Log("player: " + manager.players[player_index].player_GO + " failed ", manager.players[player_index].player_GO);
             }
             else {
                 failedCounter = 0;
             }
 
             if (failedCounter >= maxFailedBeforeEnding){
-                Debug.Log("player: " + manager.players[player_index].player_GO + " killed ", manager.players[player_index].player_GO);
                 failedCounter = 0;
                 manager.onDeath(player_index);
             }

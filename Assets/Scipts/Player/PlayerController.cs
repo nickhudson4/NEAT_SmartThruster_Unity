@@ -8,7 +8,7 @@ public class PlayerController : MonoBehaviour
     NeatManager networkManager;
 
     private float force_mult = 8.0f; //7 is good
-    private float speed = 12; //10 for frameInd, else 0.2
+    private float speed = 50; //10 for frameInd, else 0.2
     private float rot_speed = 120.0f; //0.2 for build, 5.0 for editor, 20 for frameInd
 
     void Awake(){
@@ -97,6 +97,11 @@ public class PlayerController : MonoBehaviour
             rb.AddForce((Vector3.right * -1.0f) * force_mult * Time.deltaTime, ForceMode.Impulse);
 
         }
+    }
+
+    public void applyTranslateOnAxis(float horiz, float vert, float speed2){
+        Vector3 dir = new Vector3(horiz, 0, vert);
+        rb.MovePosition(transform.position + (dir * (speed * .02f)));
     }
 
 
